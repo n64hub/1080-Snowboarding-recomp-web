@@ -1,0 +1,10 @@
+# Never commit game data.
+*.z64
+*.n64
+*.v64
+*.rom
+baserom*
+
+build/
+recomp/us_try.toml
+__pycache__/

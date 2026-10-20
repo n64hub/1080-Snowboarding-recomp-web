@@ -1,0 +1,342 @@
+#!/usr/bin/env python3
+"""Generate N64Recomp input for 1080 Snowboarding from a user-supplied ROM.
+
+Outputs (in the output directory):
+  image.bin   ROM copy with every USO module's code appended, with relocations
+              pre-applied against unique placeholder addresses
+  syms.toml   N64Recomp symbol file: sections, functions and relocations
+  modules.json  Placeholder address layout per module, used by the runtime to
+              map placeholder sections onto wherever the game loads them
+
+How the game's code is organised:
+  * The kernel is loaded once at 0x80000400 (ROM 0x1000) and never moves.
+  * Everything else lives in USO modules that the kernel loads and links at
+    runtime to whatever address it allocates. Each module has text, rodata,
+    data and bss sections, a symbol table and relocation tables.
+
+The recompiler needs a fixed address for every function, so each module gets
+its own placeholder address range, packed upward from PLACEHOLDER_BASE. Code is
+relocated against those placeholders here, and every relocated instruction is
+also emitted as a relocation so the runtime can point it at the real address.
+"""
+import argparse
+import json
+import struct
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import uso  # noqa: E402
+
+KERNEL_ROM = 0x1000
+KERNEL_VRAM = 0x80000400
+KERNEL_TEXT_SIZE = 0x9E60
+
+PLACEHOLDER_BASE = 0x81000000
+
+SECTION_ORDER = ["text", "rodata", "data", "bss"]
+SECTION_TYPE = {5: "text", 6: "data", 7: "rodata", 8: "bss"}
+R_26, R_LO16, R_HI16 = 1, 2, 3
+RELOC_NAMES = {R_26: "R_MIPS_26", R_LO16: "R_MIPS_LO16", R_HI16: "R_MIPS_HI16"}
+
+
+def align(x, a):
+    return (x + a - 1) & ~(a - 1)
+
+
+class Module:
+    def __init__(self, index, name, secs, base):
+        self.index = index
+        self.name = name
+        self.secs = secs
+        # Placeholder layout: text, rodata, data, bss packed in that order.
+        self.base = base
+        self.addr = {}
+        cur = self.base
+        for s in SECTION_ORDER:
+            size = self.size(s)
+            self.addr[s] = cur
+            cur = align(cur + size, 0x10)
+        self.end = align(cur, 0x1000)
+        self.syms = self._parse_syms()
+
+    def size(self, s):
+        if s == "bss":
+            return self.secs.get("bss", 0)
+        return len(self.secs.get(s, b""))
+
+    def _parse_syms(self):
+        """List of (kind, a, b) per symbol index.
+
+        kind 'def': a = section name, b = offset
+        kind 'imp': a = module index, b = symbol index in that module
+        kind 'abs': a = absolute address
+        """
+        blob = self.secs.get("sym", b"")
+        out = []
+        for i in range(len(blob) // 12):
+            info, value, extra = struct.unpack_from(">III", blob, i * 12)
+            info >>= 16
+            low, high = info & 0xF, info >> 4
+            if low == 1:
+                out.append(("imp", high, extra >> 16))
+            elif low == 3:
+                out.append(("abs", value, None))
+            elif low in (2, 4) and high in SECTION_TYPE:
+                out.append(("def", SECTION_TYPE[high], value))
+            else:
+                out.append(("none", None, None))
+        return out
+
+
+def resolve(modules, mod, sym_idx, depth=0):
+    """Placeholder address of symbol sym_idx in module mod."""
+    if depth > 4 or sym_idx >= len(mod.syms):
+        return None
+    kind, a, b = mod.syms[sym_idx]
+    if kind == "def":
+        return mod.addr[a] + b
+    if kind == "abs":
+        return a
+    if kind == "imp":
+        target = modules.get(a)
+        if target is None:
+            return None
+        return resolve(modules, target, b, depth + 1)
+    return None
+
+
+def text_functions(mod, extra_targets):
+    """Sorted function start offsets within the module's text."""
+    size = mod.size("text")
+    starts = {0}
+    for kind, sec, off in mod.syms:
+        if kind == "def" and sec == "text" and off < size:
+            starts.add(off)
+    starts.update(o for o in extra_targets if 0 <= o < size)
+    return sorted(o for o in starts if o % 4 == 0)
+
+
+def relocate_text(modules, mod, problems):
+    """Return (patched text bytes, reloc list, internal jal targets)."""
+    text = bytearray(mod.secs["text"])
+    relocs = []
+    jal_targets = set()
+    entries = uso.decode_relocs(mod.secs.get("text_reloc", b""))
+    # Pair HI16 relocs with the following LO16 against the same symbol so the
+    # addend split across the two instructions is reassembled correctly.
+    pending_hi = {}
+    for sym_idx, kind, off in entries:
+        if off + 4 > len(text):
+            problems.append(f"{mod.name}: reloc past end of text at {off:#x}")
+            continue
+        word = struct.unpack_from(">I", text, off)[0]
+        target = resolve(modules, mod, sym_idx)
+        if target is None:
+            problems.append(f"{mod.name}: unresolved symbol {sym_idx} at {off:#x}")
+            continue
+        vram = mod.addr["text"] + off
+        if kind == R_26:
+            addend = (word & 0x3FFFFFF) << 2
+            dest = target + addend
+            word = (word & 0xFC000000) | ((dest >> 2) & 0x3FFFFFF)
+            if mod.addr["text"] <= dest < mod.addr["text"] + mod.size("text"):
+                jal_targets.add(dest - mod.addr["text"])
+        elif kind == R_HI16:
+            pending_hi.setdefault(sym_idx, []).append((off, word))
+            continue
+        elif kind == R_LO16:
+            lo = struct.unpack(">h", struct.pack(">H", word & 0xFFFF))[0]
+            his = pending_hi.pop(sym_idx, [])
+            hi_addend = (his[0][1] & 0xFFFF) << 16 if his else 0
+            dest = target + hi_addend + lo
+            for hoff, hword in his:
+                hi = ((dest + 0x8000) >> 16) & 0xFFFF
+                struct.pack_into(">I", text, hoff, (hword & 0xFFFF0000) | hi)
+                relocs.append((mod.addr["text"] + hoff, dest, R_HI16))
+            word = (word & 0xFFFF0000) | (dest & 0xFFFF)
+            # A LO16 can reuse an earlier HI16 (several loads off one lui).
+            if not his:
+                pass
+        else:
+            problems.append(f"{mod.name}: unknown text reloc kind {kind}")
+            continue
+        struct.pack_into(">I", text, off, word)
+        if dest >= PLACEHOLDER_BASE:
+            relocs.append((vram, dest, kind))
+    for sym_idx, his in pending_hi.items():
+        for hoff, hword in his:
+            target = resolve(modules, mod, sym_idx)
+            dest = target + ((hword & 0xFFFF) << 16)
+            hi = ((dest + 0x8000) >> 16) & 0xFFFF
+            struct.pack_into(">I", text, hoff, (hword & 0xFFFF0000) | hi)
+            relocs.append((mod.addr["text"] + hoff, dest, R_HI16))
+            problems.append(f"{mod.name}: HI16 without LO16 at {hoff:#x}")
+    relocs = [r for r in relocs if r[1] >= PLACEHOLDER_BASE]
+    relocs.sort()
+    return bytes(text), relocs, jal_targets
+
+
+def relocate_data(modules, mod, sec, problems):
+    """Section bytes with 32-bit pointer relocations applied (kind 4)."""
+    blob = bytearray(mod.secs[sec])
+    for sym_idx, kind, off in uso.decode_relocs(mod.secs.get(sec + "_reloc", b"")):
+        target = resolve(modules, mod, sym_idx)
+        if kind != 4 or target is None or off + 4 > len(blob):
+            problems.append(f"{mod.name}: bad {sec} reloc {sym_idx}/{kind} at {off:#x}")
+            continue
+        word = struct.unpack_from(">I", blob, off)[0]
+        struct.pack_into(">I", blob, off, (word + target) & 0xFFFFFFFF)
+    return bytes(blob)
+
+
+def kernel_functions(rom):
+    """Function starts in the kernel.
+
+    The kernel has no symbol table, so starts come from the entry point, every
+    jal target, every address loaded with a lui/addiu pair (function pointers
+    such as thread entry points), and the first instruction after a `jr $ra`
+    that no earlier branch in the same function jumps past."""
+    end = KERNEL_VRAM + KERNEL_TEXT_SIZE
+    words = [struct.unpack_from(">I", rom, o)[0]
+             for o in range(KERNEL_ROM, KERNEL_ROM + KERNEL_TEXT_SIZE, 4)]
+    starts = {KERNEL_VRAM}
+    lui = {}
+    for i, w in enumerate(words):
+        op = w >> 26
+        if op == 3:
+            t = 0x80000000 | ((w & 0x3FFFFFF) << 2)
+            if KERNEL_VRAM <= t < end:
+                starts.add(t)
+        elif op == 0x0F:
+            lui[(w >> 16) & 0x1F] = (w & 0xFFFF) << 16
+        elif op == 0x09 and ((w >> 21) & 0x1F) in lui:
+            t = (lui[(w >> 21) & 0x1F] + struct.unpack(">h", struct.pack(">H", w & 0xFFFF))[0]) & 0xFFFFFFFF
+            if KERNEL_VRAM <= t < end and t % 4 == 0:
+                starts.add(t)
+
+    def branch_target(i, w):
+        op = w >> 26
+        rt = (w >> 16) & 0x1F
+        if op in (4, 5, 6, 7, 0x14, 0x15, 0x16, 0x17) or (op == 1 and rt in (0, 1, 2, 3, 0x10, 0x11)) \
+                or (op == 0x11 and ((w >> 21) & 0x1F) == 8):
+            off = struct.unpack(">h", struct.pack(">H", w & 0xFFFF))[0]
+            return i + 1 + off
+        if op == 2:  # j: usually a branch within the function
+            return (((KERNEL_VRAM + i * 4) & 0xF0000000) | ((w & 0x3FFFFFF) << 2) - KERNEL_VRAM) // 4
+        return None
+
+    reach = 0
+    for i, w in enumerate(words):
+        if KERNEL_VRAM + i * 4 in starts:
+            reach = i
+        t = branch_target(i, w)
+        if t is not None and 0 <= t < len(words):
+            reach = max(reach, t)
+        if w == 0x03E00008 and reach <= i + 1:
+            j = i + 2
+            while j < len(words) and words[j] == 0:
+                j += 1
+            if j < len(words):
+                starts.add(KERNEL_VRAM + j * 4)
+    return sorted(starts)
+
+
+def toml_funcs(lines, starts, end, name_fn):
+    lines.append("functions = [")
+    for i, s in enumerate(starts):
+        e = starts[i + 1] if i + 1 < len(starts) else end
+        if e > s:
+            lines.append(f'    {{ name = "{name_fn(s)}", vram = 0x{s:08X}, size = 0x{e - s:X} }},')
+    lines.append("]")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("rom", help="1080 Snowboarding (USA) .z64 ROM")
+    ap.add_argument("out", help="output directory")
+    a = ap.parse_args()
+
+    rom = open(a.rom, "rb").read()
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+
+    modules = {}
+    base = PLACEHOLDER_BASE
+    for idx, name, _entry, data in sorted(uso.list_files(rom)):
+        if not name.endswith(".uso"):
+            continue
+        modules[idx] = Module(idx, name, uso.read_module(rom, data), base)
+        base = modules[idx].end
+
+    problems = []
+    image = bytearray(rom)
+    image += bytes(align(len(image), 0x10) - len(image))
+    lines = ["# Generated by tools/gen_recomp.py. Do not edit.", ""]
+
+    kstarts = kernel_functions(rom)
+    lines += ["[[section]]", 'name = "kernel"', f"rom = 0x{KERNEL_ROM:X}",
+              f"vram = 0x{KERNEL_VRAM:08X}", f"size = 0x{KERNEL_TEXT_SIZE:X}"]
+    toml_funcs(lines, kstarts, KERNEL_VRAM + KERNEL_TEXT_SIZE,
+               lambda v: f"func_{v:08X}")
+    lines.append("")
+
+    layout = {}
+    total_funcs = len(kstarts)
+    total_relocs = 0
+    for idx in sorted(modules):
+        mod = modules[idx]
+        stem = mod.name.removesuffix(".uso")
+        entry = {"index": idx, "name": mod.name,
+                 "sections": {s: {"vram": mod.addr[s], "size": mod.size(s)}
+                              for s in SECTION_ORDER}}
+        if mod.size("text"):
+            text, relocs, jal_targets = relocate_text(modules, mod, problems)
+            rom_off = len(image)
+            image += text
+            image += bytes(align(len(image), 0x10) - len(image))
+            starts = text_functions(mod, jal_targets)
+            base = mod.addr["text"]
+            lines += ["[[section]]", f'name = "{stem}_text"', f"rom = 0x{rom_off:X}",
+                      f"vram = 0x{base:08X}", f"size = 0x{len(text):X}"]
+            toml_funcs(lines, [base + s for s in starts], base + len(text),
+                       lambda v, b=base, st=stem: f"{st}_{v - b:06X}")
+            lines.append("relocs = [")
+            for vram, target, kind in relocs:
+                lines.append(f'    {{ type = "{RELOC_NAMES[kind]}", vram = 0x{vram:08X}, '
+                             f"target_vram = 0x{target:08X} }},")
+            lines.append("]")
+            lines.append("")
+            entry["text_rom"] = rom_off
+            entry["functions"] = len(starts)
+            total_funcs += len(starts)
+            total_relocs += len(relocs)
+        layout[mod.name] = entry
+        # Data sections are listed so relocations can target them. Their bytes
+        # go in the image too (with pointers relocated) because the recompiler
+        # reads jump tables out of rodata.
+        for s in ("rodata", "data", "bss"):
+            if not mod.size(s):
+                continue
+            rom_off = 0
+            if s != "bss":
+                blob = relocate_data(modules, mod, s, problems)
+                rom_off = len(image)
+                image += blob
+                image += bytes(align(len(image), 0x10) - len(image))
+            lines += ["[[section]]", f'name = "{stem}_{s}"', f"rom = 0x{rom_off:X}",
+                      f"vram = 0x{mod.addr[s]:08X}", f"size = 0x{mod.size(s):X}",
+                      "functions = []", "relocs = []", ""]
+
+    (out / "image.bin").write_bytes(image)
+    (out / "syms.toml").write_text("\n".join(lines) + "\n")
+    (out / "modules.json").write_text(json.dumps(layout, indent=1))
+    print(f"{len(modules)} modules, {total_funcs} functions, {total_relocs} relocations")
+    if problems:
+        print(f"{len(problems)} problems, first few:")
+        for p in problems[:15]:
+            print("  " + p)
+
+
+if __name__ == "__main__":
+    main()

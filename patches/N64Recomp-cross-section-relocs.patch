@@ -1,0 +1,44 @@
+diff --git a/src/config.cpp b/src/config.cpp
+index 1066aff..d12f376 100644
+--- a/src/config.cpp
++++ b/src/config.cpp
+@@ -671,7 +671,9 @@ bool N64Recomp::Context::from_symbol_file(const std::filesystem::path& symbol_fi
+ 
+                                 Reloc cur_reloc{};
+                                 cur_reloc.address = vram.value();
+-                                cur_reloc.target_section_offset = target_vram.value() - section.ram_addr;
++                                // Store the absolute target for now; the target section is
++                                // resolved once every section has been read.
++                                cur_reloc.target_section_offset = target_vram.value();
+                                 cur_reloc.symbol_index = (uint32_t)-1;
+                                 cur_reloc.target_section = section_index;
+                                 cur_reloc.type = reloc_type;
+@@ -697,6 +699,28 @@ bool N64Recomp::Context::from_symbol_file(const std::filesystem::path& symbol_fi
+         return false;
+     }
+ 
++    // Point each reloc at the section that contains its target, which may be a
++    // different section from the one the reloc is in.
++    for (N64Recomp::Section& section : ret.sections) {
++        for (N64Recomp::Reloc& reloc : section.relocs) {
++            uint32_t target_vram = reloc.target_section_offset;
++            bool found = false;
++            for (size_t i = 0; i < ret.sections.size(); i++) {
++                const N64Recomp::Section& target = ret.sections[i];
++                if (target_vram >= target.ram_addr && target_vram < target.ram_addr + target.size) {
++                    reloc.target_section = (uint16_t)i;
++                    reloc.target_section_offset = target_vram - target.ram_addr;
++                    found = true;
++                    break;
++                }
++            }
++            if (!found) {
++                std::cerr << "Reloc target 0x" << std::hex << target_vram << " is not inside any section" << std::endl;
++                return false;
++            }
++        }
++    }
++
+     ret.rom = std::move(rom);
+     out = std::move(ret);
+     return true;
