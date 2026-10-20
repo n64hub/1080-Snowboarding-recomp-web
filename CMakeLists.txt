@@ -12,6 +12,24 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Small fixes to the runtime submodule (see patches/runtime/). Applied once;
+# a patch that is already in place is left alone.
+find_package(Git QUIET)
+foreach(runtime_patch IN ITEMS "lib/N64ModernRuntime|patches/runtime/N64ModernRuntime.patch")
+    string(REPLACE "|" ";" runtime_patch_parts "${runtime_patch}")
+    list(GET runtime_patch_parts 0 patch_dir)
+    list(GET runtime_patch_parts 1 patch_file)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}/${patch_dir}" apply --reverse --check "${CMAKE_SOURCE_DIR}/${patch_file}"
+        RESULT_VARIABLE patch_already_applied OUTPUT_QUIET ERROR_QUIET)
+    if (NOT patch_already_applied EQUAL 0)
+        execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}/${patch_dir}" apply "${CMAKE_SOURCE_DIR}/${patch_file}"
+            RESULT_VARIABLE patch_result)
+        if (NOT patch_result EQUAL 0)
+            message(FATAL_ERROR "Could not apply ${patch_file}")
+        endif()
+    endif()
+endforeach()
+
 # Where tools/recompile.sh put the recompiled game. Nothing derived from the
 # ROM is checked in, so run that script first.
 set(GAME_GENERATED_DIR "${CMAKE_SOURCE_DIR}/build" CACHE PATH "Output folder of tools/recompile.sh")
@@ -106,6 +124,7 @@ set (SOURCES
 
     ${CMAKE_SOURCE_DIR}/src/game/config.cpp
     ${CMAKE_SOURCE_DIR}/src/game/libultra_extras.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/boot_residue.cpp
 
     ${GAME_GENERATED_DIR}/rsp/aspMain.cpp
 )

@@ -8,6 +8,8 @@ symbols_file_path = "syms.toml"
 rom_file_path = "image.bin"
 output_func_path = "../RecompiledFuncs"
 uses_mips3_float_mode = false
+# game_reloc.h makes references into unloaded modules resolve to 0.
+recomp_include = "#include \"recomp.h\"\n#include \"game_reloc.h\""
 
 [patches]
 # Kernel functions the recompiler can't translate. func_80003280 through
@@ -26,9 +28,36 @@ stubs = [
 # read directly instead of poking PI registers.
 # IPL3 stores the CIC id at 0x80000310 (osCicId). The game refuses to boot
 # ("Security Check: FAIL") unless it is 6103, so set it as the boot code would.
+# game_boot_residue() recreates other words IPL3 leaves behind that the game
+# checks later (src/game/boot_residue.cpp).
 [[patches.hook]]
 func = "recomp_entrypoint"
-text = "    MEM_W(0, (gpr)(int32_t)0x80000310) = 6103;"
+text = "    MEM_W(0, (gpr)(int32_t)0x80000310) = 6103; { void game_boot_residue(uint8_t*); game_boot_residue(rdram); }"
+
+# The kernel's module loader (func_80001994) and unloader (func_8000717C)
+# update the slot table. Module code can use a freshly loaded module right after
+# the call returns, before any kernel function-pointer call syncs the runtime,
+# so sync on the way out of both as well.
+[[patches.hook]]
+func = "func_80001994"
+before_vram = 0x80001BAC
+text = "    { void game_sync_modules(uint8_t*); game_sync_modules(rdram); }"
+
+[[patches.hook]]
+func = "func_8000717C"
+before_vram = 0x80007354
+text = "    { void game_sync_modules(uint8_t*); game_sync_modules(rdram); }"
+
+# The task scheduler (bootup_061CF4) asks the RSP to yield the graphics task
+# when an audio task is due, and starts the audio task (kept in $s6) once the
+# RSP reports back. On hardware that comes within microseconds; the runtime
+# ignores yields, so the report can arrive after the next retrace, which would
+# overwrite $s6 (with 0 when no new audio task is pending) and start a null
+# task. While a yield is pending ($s4), leave $s6 alone.
+[[patches.hook]]
+func = "bootup_061CF4"
+before_vram = 0x81061F1C
+text = "    if (ctx->r20 != 0) goto L_81061F80;"
 
 # The game busy-waits with osYieldThread. The runtime's threads only receive
 # interrupt messages (VI, SP, SI) when they wait, so let them through here.

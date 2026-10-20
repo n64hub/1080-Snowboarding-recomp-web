@@ -58,13 +58,32 @@ constexpr uint32_t slot_section_offsets[SECTION_COUNT] = {
 constexpr size_t max_files = 0x87;
 uint32_t loaded_addresses[max_files][SECTION_COUNT] = {};
 size_t text_table_index[max_files];
+// Text address of a module whose memory the game reused before clearing its slot.
+uint32_t stale_text[max_files] = {};
 
 uint32_t read_word(uint8_t* rdram, uint32_t vram) {
     return *reinterpret_cast<uint32_t*>(rdram + (vram - 0x80000000u));
 }
 }
 
+// See include/game_reloc.h.
+extern "C" uint8_t game_section_loaded[num_sections];
+uint8_t game_section_loaded[num_sections];
+
 void game::register_overlays() {
+    // Every section counts as loaded except the ones that belong to a module,
+    // which start out unloaded until the game's loader puts them in place.
+    for (size_t i = 0; i < num_sections; i++) {
+        game_section_loaded[i] = 1;
+    }
+    for (const ModuleInfo& mod : modules) {
+        for (const SectionInfo& sec : mod.sections) {
+            if (sec.index >= 0) {
+                game_section_loaded[sec.index] = 0;
+            }
+        }
+    }
+
     recomp::overlays::overlay_section_table_data_t sections{
         .code_sections = section_table,
         .num_code_sections = ARRLEN(section_table),
@@ -95,27 +114,75 @@ extern "C" void game_sync_modules(uint8_t* rdram) {
         initialized = true;
     }
 
-    for (const ModuleInfo& mod : modules) {
+    // Read every slot first. A module can be freed and another loaded into
+    // the same memory between two syncs, so all unloads happen before any
+    // load, or the runtime would see two modules' code overlap.
+    constexpr size_t module_count = sizeof(modules) / sizeof(modules[0]);
+    static uint32_t now_all[module_count][SECTION_COUNT];
+    static bool changed_all[module_count];
+
+    for (size_t m = 0; m < module_count; m++) {
+        const ModuleInfo& mod = modules[m];
         uint32_t slot = slot_table + mod.file_index * slot_stride;
         uint32_t* loaded = loaded_addresses[mod.file_index];
-
-        uint32_t now[SECTION_COUNT];
-        bool changed = false;
+        changed_all[m] = false;
         for (int s = 0; s < SECTION_COUNT; s++) {
-            now[s] = read_word(rdram, slot + slot_section_offsets[s]);
-            changed |= now[s] != loaded[s];
+            now_all[m][s] = read_word(rdram, slot + slot_section_offsets[s]);
         }
-        if (!changed) {
+        // Code that another module has since replaced stays unmapped until
+        // the slot changes.
+        uint32_t& stale = stale_text[mod.file_index];
+        if (stale != 0) {
+            if (now_all[m][TEXT] == stale) {
+                now_all[m][TEXT] = 0;
+            } else {
+                stale = 0;
+            }
+        }
+        for (int s = 0; s < SECTION_COUNT; s++) {
+            changed_all[m] |= now_all[m][s] != loaded[s];
+        }
+        const SectionInfo& text = mod.sections[TEXT];
+        if (changed_all[m] && text.index >= 0 && text.size != 0 && loaded[TEXT] != 0) {
+            unload_overlays((int32_t)loaded[TEXT], text.size);
+        }
+    }
+
+    for (size_t m = 0; m < module_count; m++) {
+        if (!changed_all[m]) {
             continue;
         }
+        const ModuleInfo& mod = modules[m];
+        uint32_t* loaded = loaded_addresses[mod.file_index];
+        const uint32_t* now = now_all[m];
 
         const SectionInfo& text = mod.sections[TEXT];
-        if (text.index >= 0 && text.size != 0) {
-            if (loaded[TEXT] != 0) {
-                unload_overlays((int32_t)loaded[TEXT], text.size);
+        if (text.index >= 0 && text.size != 0 && now[TEXT] != 0 &&
+            text_table_index[mod.file_index] != SIZE_MAX) {
+            // The game can free a module and reuse its memory before it clears
+            // that module's slot. Drop any module whose code is still mapped
+            // where this one is going.
+            uint32_t start = now[TEXT], end = now[TEXT] + text.size;
+            for (const ModuleInfo& other : modules) {
+                uint32_t* other_loaded = loaded_addresses[other.file_index];
+                const SectionInfo& other_text = other.sections[TEXT];
+                if (&other == &mod || other_loaded[TEXT] == 0 || other_text.index < 0 || other_text.size == 0) {
+                    continue;
+                }
+                if (other_loaded[TEXT] < end && other_loaded[TEXT] + other_text.size > start) {
+                    fprintf(stderr, "[modules] %s replaced %s's memory before its slot was cleared\n",
+                        mod.name, other.name);
+                    unload_overlays((int32_t)other_loaded[TEXT], other_text.size);
+                    stale_text[other.file_index] = other_loaded[TEXT];
+                    other_loaded[TEXT] = 0;
+                }
             }
-            if (now[TEXT] != 0 && text_table_index[mod.file_index] != SIZE_MAX) {
-                load_overlay(text_table_index[mod.file_index], (int32_t)now[TEXT]);
+            load_overlay(text_table_index[mod.file_index], (int32_t)now[TEXT]);
+        }
+
+        for (int s = 0; s < SECTION_COUNT; s++) {
+            if (mod.sections[s].index >= 0) {
+                game_section_loaded[mod.sections[s].index] = now[s] != 0;
             }
         }
 

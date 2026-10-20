@@ -1,0 +1,13 @@
+diff --git a/librecomp/src/overlays.cpp b/librecomp/src/overlays.cpp
+index 8c8e5d1..8a0cd5d 100644
+--- a/librecomp/src/overlays.cpp
++++ b/librecomp/src/overlays.cpp
+@@ -243,7 +243,7 @@ extern "C" void unload_overlays(int32_t ram_addr, uint32_t size) {
+         const auto& section = sections_info.code_sections[it->section_table_index];
+ 
+         // Check if the unloaded region overlaps with the loaded section
+-        if (ram_addr < (it->loaded_ram_addr + section.size) && (ram_addr + size) >= it->loaded_ram_addr) {
++        if (ram_addr < (it->loaded_ram_addr + section.size) && (ram_addr + size) > it->loaded_ram_addr) {
+             // Check if the section isn't entirely in the loaded region
+             if (ram_addr > it->loaded_ram_addr || (ram_addr + size) < (it->loaded_ram_addr + section.size)) {
+                 fprintf(stderr,
