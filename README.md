@@ -18,7 +18,7 @@ Early work in progress.
 - [x] Recompile the audio microcode with RSPRecomp
 - [x] Runtime: N64ModernRuntime + RT64 + RecompFrontend menus, synced with the game's module loader
 - [x] First boot: intro, title screen and attract demo run (Linux)
-- [ ] Windows builds
+- [x] Windows builds (cross-compiled from Linux with llvm-mingw, see below)
 - [ ] Enhancements: widescreen, 60 and 120 fps modes, draw distance, FOV, settings menu
 - [ ] HD texture pack, CRT filters
 - [ ] Bonus: 3D board models on board select, audio investigation
@@ -40,6 +40,18 @@ builds the game with [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRu
 [RT64](https://github.com/rt64/rt64) and RecompFrontend.
 
 On first launch the game asks for your ROM.
+
+### Windows (cross-compiled from Linux)
+
+After `tools/recompile.sh`, with [llvm-mingw](https://github.com/mstorsjo/llvm-mingw),
+[DirectX-Headers](https://github.com/microsoft/DirectX-Headers) and wine64 installed:
+
+```bash
+LLVM_MINGW=/opt/llvm-mingw DIRECTX_HEADERS=/opt/DirectX-Headers tools/build-windows.sh
+```
+
+The script applies the small MinGW fixes in `patches/windows-cross/` to the renderer
+submodules and leaves a ready-to-zip folder in `build/win/package/`.
 
 ## Credits
 

@@ -183,17 +183,25 @@ if (WIN32)
             "${CMAKE_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxcompiler.dll"
             $<TARGET_FILE_DIR:1080SnowboardingRecompiled>)
 
-    set_target_properties(
-        1080SnowboardingRecompiled
-        PROPERTIES
-            LINK_FLAGS_DEBUG "/SUBSYSTEM:CONSOLE"
-            LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
-            LINK_FLAGS_RELWITHDEBINFO "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
-            LINK_FLAGS_MINSIZEREL "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
-    )
+    if (MINGW)
+        # Cross-compiled with llvm-mingw (tools/build-windows.sh).
+        target_link_options(1080SnowboardingRecompiled PRIVATE $<$<NOT:$<CONFIG:Debug>>:-mwindows>)
+        target_sources(1080SnowboardingRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/src/main/mingw_uuids.cpp)
+        target_include_directories(1080SnowboardingRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/lib/rt64/src/contrib/dxc/inc)
+        target_link_libraries(1080SnowboardingRecompiled PRIVATE dwmapi d3dcompiler)
+    else()
+        set_target_properties(
+            1080SnowboardingRecompiled
+            PROPERTIES
+                LINK_FLAGS_DEBUG "/SUBSYSTEM:CONSOLE"
+                LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
+                LINK_FLAGS_RELWITHDEBINFO "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
+                LINK_FLAGS_MINSIZEREL "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
+        )
+    endif()
 
     target_sources(1080SnowboardingRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/icons/app.rc)
-    target_link_libraries(1080SnowboardingRecompiled PRIVATE SDL2 Winmm.lib)
+    target_link_libraries(1080SnowboardingRecompiled PRIVATE SDL2 winmm)
 endif()
 
 if (APPLE)
@@ -265,7 +273,12 @@ set (DXC_GS_OPTS "${DXC_COMMON_OPTS}" "-E" "GSMain" "-T gs_6_0")
 set (DXC_RT_OPTS "${DXC_COMMON_OPTS}" "-D" "RT_SHADER" "-T" "lib_6_3" "-fspv-target-env=vulkan1.1spirv1.4" "-fspv-extension=SPV_KHR_ray_tracing" "-fspv-extension=SPV_EXT_descriptor_indexing")
 
 if (${WIN32})
-    set (DXC "${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxc.exe")
+    if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+        # Cross-compiling from Linux (see tools/build-windows.sh).
+        set (DXC "LD_LIBRARY_PATH=${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/lib/x64" "${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxc-linux")
+    else()
+        set (DXC "${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxc.exe")
+    endif()
     add_compile_definitions(NOMINMAX)
 else()
     if (APPLE)

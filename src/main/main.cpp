@@ -331,12 +331,9 @@ bool reset_audio(uint32_t output_freq) {
 
     audio_device = SDL_OpenAudioDevice(nullptr, false, &spec_desired, nullptr, 0);
     if (audio_device == 0) {
-        std::string audio_error =
-            std::string("No audio device could be found. Please make sure an audio device is available.\n"
-                        "Error opening audio device: ") +
-            SDL_GetError();
-        recompui::message_box(audio_error.c_str());
-        return false;
+        // Keep running without sound rather than refusing to start.
+        fprintf(stderr, "No audio device could be opened, running without sound: %s\n", SDL_GetError());
+        return true;
     }
     SDL_PauseAudioDevice(audio_device, 0);
 
@@ -585,7 +582,7 @@ int main(int argc, char** argv) {
 
 #ifdef _WIN32
     // Force wasapi on Windows, as there seems to be some issue with sample queueing with directsound currently.
-    SDL_setenv("SDL_AUDIODRIVER", "wasapi", true);
+    SDL_setenv("SDL_AUDIODRIVER", "wasapi", false); // unless the user picked one
 #endif
 
 #if defined(__linux__) && defined(RECOMP_FLATPAK)
