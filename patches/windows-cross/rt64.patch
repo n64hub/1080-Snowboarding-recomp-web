@@ -28,6 +28,22 @@ index 8c6af2b..e936b24 100644
      return (unsigned)__builtin_ctzll(val);
  #elif defined(__ICCARM__)
      return (unsigned)__builtin_ctzll(val);
+diff --git a/src/common/rt64_user_configuration.cpp b/src/common/rt64_user_configuration.cpp
+index cc35442..6b8ae61 100644
+--- a/src/common/rt64_user_configuration.cpp
++++ b/src/common/rt64_user_configuration.cpp
+@@ -141,7 +141,10 @@ namespace RT64 {
+ 
+     UserConfiguration::GraphicsAPI UserConfiguration::resolveGraphicsAPI(GraphicsAPI graphicsAPI) {
+         if (graphicsAPI == UserConfiguration::GraphicsAPI::Automatic) {
+-#       if defined(_WIN64)
++#       if defined(_WIN64) && defined(__MINGW32__)
++            // MinGW builds default to Vulkan: their D3D12 path is less tested.
++            return UserConfiguration::GraphicsAPI::Vulkan;
++#       elif defined(_WIN64)
+             // Change the default graphics API when running under Wine to avoid using the D3D12 translation layer when possible. Recreate the default user configuration right afterwards so this new value is assigned.
+             return Sommelier::detectWine() ? UserConfiguration::GraphicsAPI::Vulkan : UserConfiguration::GraphicsAPI::D3D12;
+ #       elif defined(__APPLE__)
 diff --git a/src/render/rt64_optimus.cpp b/src/render/rt64_optimus.cpp
 index 348aa52..db52706 100644
 --- a/src/render/rt64_optimus.cpp
