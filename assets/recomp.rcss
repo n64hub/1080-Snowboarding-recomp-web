@@ -1,0 +1,5 @@
+/* The menus are styled in code (src/main/theme.cpp); RecompFrontend only
+   needs this file to name the primary font. */
+body {
+  font-family: LatoLatin;
+}

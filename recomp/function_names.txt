@@ -27,7 +27,7 @@ func_80003E64 __osDispatchThread
 func_80003FF0 __osDequeueThread
 func_80004030 osDestroyThread
 func_80004140 __osLeoInterrupt
-func_80004A50 osPiRawStartDma
+func_80004A50 osPiRawStartDma_kernel
 func_80004B30 osVirtualToPhysical
 func_80004EC0 __osSiRawReadIo
 func_80004FE0 osRecvMesg
@@ -59,7 +59,7 @@ func_80009000 __osSpDeviceBusy
 func_80009C40 __osSetFpcCsr
 func_80009C50 osEPiRawReadIo
 func_80009DF0 osMapTLBRdb
-func_80009E50 osYieldThread
+func_80009E50 osYieldThread_kernel
 func_80009EB0 osEPiRawWriteIo
 func_8000A040 __osSiRawWriteIo
 func_8000A090 __osSpRawWriteIo
@@ -113,7 +113,7 @@ bootup_080F18 __ull_divremi
 bootup_080F78 __ll_mod
 bootup_081014 __ll_rshift
 bootup_081040 __osSetSR
-bootup_081060 osPiRawStartDma
+bootup_081060 osPiRawStartDma_bootup
 bootup_081140 __osSiRawStartDma
 bootup_0811F0 __osSpRawStartDma
 bootup_081280 osEPiLinkHandle
@@ -197,7 +197,7 @@ bootup_0876A0 osPiWriteIo
 bootup_0876E0 osPiRawWriteIo
 bootup_087730 osEPiRawReadIo
 bootup_0878D0 osMapTLBRdb
-bootup_087930 osYieldThread
+bootup_087930 osYieldThread_bootup
 bootup_087980 osViGetCurrentField
 bootup_0879A0 __osContRamWrite
 bootup_087D00 osEPiRawWriteIo
@@ -217,3 +217,9 @@ bootup_089420 osViSetXScale
 bootup_0898D0 __osSpSetPc
 bootup_081FC0 osGetCount
 bootup_084980 __osSetCompare
+func_80002930 osInitialize
+func_80005920 osCreatePiManager
+bootup_089560 osCreateViManager
+func_80006640 osPiGetStatus
+bootup_0896E8 viMgrMain
+bootup_03BDF0 osAiSetNextBuffer

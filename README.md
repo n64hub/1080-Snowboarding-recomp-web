@@ -15,24 +15,43 @@ Early work in progress.
 - [x] Decode the game's USO code modules, symbol tables and relocations ([docs/USO_FORMAT.md](docs/USO_FORMAT.md))
 - [x] Recompile the whole game to C with N64Recomp (3,421 functions)
 - [x] Identify the game's libultra 2.0I functions (213 named) and its RSP microcode (F3DEX 1.23 family + audio)
-- [ ] Runtime: N64ModernRuntime + RT64, hooks into the game's module loader
-- [ ] First boot on Windows
+- [x] Recompile the audio microcode with RSPRecomp
+- [x] Runtime: N64ModernRuntime + RT64 + RecompFrontend menus, synced with the game's module loader
+- [x] First boot: intro, title screen and attract demo run (Linux)
+- [ ] Windows builds
 - [ ] Enhancements: widescreen, 60 and 120 fps modes, draw distance, FOV, settings menu
 - [ ] HD texture pack, CRT filters
 - [ ] Bonus: 3D board models on board select, audio investigation
 
-## Recompiling
+## Building
+
+Clone with submodules (`git clone --recursive`), then:
 
 ```bash
 tools/recompile.sh path/to/1080.z64
+cmake -S . -B build/pc -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+cmake --build build/pc
 ```
 
-This builds a patched N64Recomp, generates its input from your ROM into
-`build/recomp-input/`, and writes the recompiled C code to
-`build/RecompiledFuncs/`.
+`tools/recompile.sh` builds a patched N64Recomp, generates its input from your
+ROM into `build/recomp-input/`, and writes the recompiled game to
+`build/RecompiledFuncs/` and its audio microcode to `build/rsp/`. CMake then
+builds the game with [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime),
+[RT64](https://github.com/rt64/rt64) and RecompFrontend.
+
+On first launch the game asks for your ROM.
 
 ## Credits
+
+- [Snowboard Kids 2: Recompiled](https://github.com/cdlewis/snowboardkids2-recomp)
+  by cdlewis (GPL-3), whose runtime setup this port started from
+- [Zelda64Recomp](https://github.com/Zelda64Recomp/Zelda64Recomp) (GPL-3), for
+  menu fonts and icons
 
 - [N64Recomp](https://github.com/N64Recomp/N64Recomp) by Mr-Wiseguy (MIT)
 - [djsaunde/1080-decomp](https://github.com/djsaunde/1080-decomp), used as a
   reference while working out the module format
+
+## License
+
+GPL-3.0 (see [LICENSE](LICENSE)), because the runtime code it builds on is GPL-3.

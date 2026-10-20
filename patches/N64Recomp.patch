@@ -1,3 +1,30 @@
+diff --git a/src/cgenerator.cpp b/src/cgenerator.cpp
+index 94f85c5..6a7186e 100644
+--- a/src/cgenerator.cpp
++++ b/src/cgenerator.cpp
+@@ -569,6 +569,11 @@ void N64Recomp::CGenerator::process_binary_op(const BinaryOp& op, const Instruct
+     thread_local std::string expression{};
+     get_operand_string(op.output, UnaryOpType::None, ctx, output);
+     get_binary_expr_string(op.type, op.operands, ctx, output, expression);
++    if (output == "0") {
++        // Writes to $zero are discarded, but keep the read (e.g. a dummy load).
++        fmt::print(output_file, "(void)({});\n", expression);
++        return;
++    }
+     fmt::print(output_file, "{} = {};\n", output, expression);
+ }
+ 
+@@ -579,6 +584,10 @@ void N64Recomp::CGenerator::process_unary_op(const UnaryOp& op, const Instructio
+     thread_local std::string input{};
+     get_operand_string(op.output, UnaryOpType::None, ctx, output);
+     get_operand_string(op.input, op.operation, ctx, input);
++    if (output == "0") {
++        fmt::print(output_file, "(void)({});\n", input);
++        return;
++    }
+     fmt::print(output_file, "{} = {};\n", output, input);
+ }
+ 
 diff --git a/src/config.cpp b/src/config.cpp
 index 1066aff..d12f376 100644
 --- a/src/config.cpp
