@@ -34,6 +34,10 @@ KERNEL_TEXT_SIZE = 0x9E60
 
 PLACEHOLDER_BASE = 0x81000000
 
+# Parts of a module's text that are RSP microcode, not CPU code. bootup.uso
+# carries rspboot, the F3DEX 1.23 family and the audio microcode here.
+MICROCODE = {"bootup.uso": [(0x23300, 0x31040), (0x46470, 0x473F0)]}
+
 SECTION_ORDER = ["text", "rodata", "data", "bss"]
 SECTION_TYPE = {5: "text", 6: "data", 7: "rodata", 8: "bss"}
 R_26, R_LO16, R_HI16 = 1, 2, 3
@@ -114,7 +118,11 @@ def text_functions(mod, extra_targets):
         if kind == "def" and sec == "text" and off < size:
             starts.add(off)
     starts.update(o for o in extra_targets if 0 <= o < size)
-    return sorted(o for o in starts if o % 4 == 0)
+    skip = MICROCODE.get(mod.name, [])
+    for lo, hi in skip:
+        starts.add(hi)
+    return sorted(o for o in starts if o % 4 == 0
+                  and not any(lo <= o < hi for lo, hi in skip))
 
 
 def relocate_text(modules, mod, problems):
@@ -242,12 +250,27 @@ def kernel_functions(rom):
     return sorted(starts)
 
 
-def toml_funcs(lines, starts, end, name_fn):
+NAMES = {}
+
+
+def load_names(path):
+    """Known names from recomp/function_names.txt: '<generated name> <name>'."""
+    for line in open(path):
+        line = line.split("#")[0].split()
+        if len(line) == 2:
+            NAMES[line[0]] = line[1]
+
+
+def toml_funcs(lines, starts, end, name_fn, cuts=()):
+    """Emit functions; each runs to the next start, or to a cut (microcode)."""
     lines.append("functions = [")
     for i, s in enumerate(starts):
         e = starts[i + 1] if i + 1 < len(starts) else end
+        e = min([e] + [c for c in cuts if c > s])
         if e > s:
-            lines.append(f'    {{ name = "{name_fn(s)}", vram = 0x{s:08X}, size = 0x{e - s:X} }},')
+            name = name_fn(s)
+            name = NAMES.get(name, name)
+            lines.append(f'    {{ name = "{name}", vram = 0x{s:08X}, size = 0x{e - s:X} }},')
     lines.append("]")
 
 
@@ -258,6 +281,9 @@ def main():
     a = ap.parse_args()
 
     rom = open(a.rom, "rb").read()
+    names_file = Path(__file__).resolve().parent.parent / "recomp" / "function_names.txt"
+    if names_file.exists():
+        load_names(names_file)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -297,10 +323,12 @@ def main():
             image += bytes(align(len(image), 0x10) - len(image))
             starts = text_functions(mod, jal_targets)
             base = mod.addr["text"]
+            cuts = [lo for lo, _ in MICROCODE.get(mod.name, [])]
             lines += ["[[section]]", f'name = "{stem}_text"', f"rom = 0x{rom_off:X}",
                       f"vram = 0x{base:08X}", f"size = 0x{len(text):X}"]
             toml_funcs(lines, [base + s for s in starts], base + len(text),
-                       lambda v, b=base, st=stem: f"{st}_{v - b:06X}")
+                       lambda v, b=base, st=stem: f"{st}_{v - b:06X}",
+                       cuts=[base + c for c in cuts])
             lines.append("relocs = [")
             for vram, target, kind in relocs:
                 lines.append(f'    {{ type = "{RELOC_NAMES[kind]}", vram = 0x{vram:08X}, '

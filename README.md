@@ -13,7 +13,8 @@ enhancements, all toggleable.
 Early work in progress.
 
 - [x] Decode the game's USO code modules, symbol tables and relocations ([docs/USO_FORMAT.md](docs/USO_FORMAT.md))
-- [x] Recompile the whole game to C with N64Recomp (3,435 functions; 38 low-level libultra routines left to the runtime)
+- [x] Recompile the whole game to C with N64Recomp (3,421 functions)
+- [x] Identify the game's libultra 2.0I functions (213 named) and its RSP microcode (F3DEX 1.23 family + audio)
 - [ ] Runtime: N64ModernRuntime + RT64, hooks into the game's module loader
 - [ ] First boot on Windows
 - [ ] Enhancements: widescreen, 60 and 120 fps modes, draw distance, FOV, settings menu

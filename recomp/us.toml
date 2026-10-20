@@ -8,47 +8,14 @@ output_func_path = "../build/RecompiledFuncs"
 uses_mips3_float_mode = false
 
 [patches]
-# Functions the recompiler can't translate yet. Most are low-level libultra
-# routines (cache maintenance, CPU control registers, interrupt handling) that
-# the PC runtime replaces with its own versions, so they are skipped here and
-# will be renamed to their libultra names as they're identified.
+# Kernel functions the recompiler can't translate. func_80003280 through
+# func_80009EA0 are the kernel's interrupt and exception handlers, which the
+# PC runtime replaces; func_80008498 pokes the RSP status register directly.
 stubs = [
-    "func_800031F0",
     "func_80003280",
     "func_800032A0",
     "func_80003344",
     "func_80003C24",
-    "func_80003E64",
-    "func_80005120",
-    "func_80005350",
-    "func_80005400",
     "func_80008498",
-    "func_80009DF0",
     "func_80009EA0",
-    "func_8000A0E0",
-    "bootup_023300",
-    "bootup_024280",
-    "bootup_024350",
-    "bootup_0252D0",
-    "bootup_026700",
-    "bootup_027B00",
-    "bootup_028F10",
-    "bootup_0299D0",
-    "bootup_02AE00",
-    "bootup_02C230",
-    "bootup_02D4A0",
-    "bootup_02E870",
-    "bootup_02FC40",
-    "bootup_046470",
-    "bootup_07EC70",
-    "bootup_07F258",
-    "bootup_07F3E4",
-    "bootup_080A70",
-    "bootup_081F00",
-    "bootup_081FC0",
-    "bootup_0838C0",
-    "bootup_083940",
-    "bootup_084980",
-    "bootup_0878D0",
-    "bootup_088ED0",
 ]
