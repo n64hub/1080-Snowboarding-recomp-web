@@ -16,7 +16,7 @@ Early work in progress.
 - [x] Recompile the whole game to C with N64Recomp (3,435 functions; 38 low-level libultra routines left to the runtime)
 - [ ] Runtime: N64ModernRuntime + RT64, hooks into the game's module loader
 - [ ] First boot on Windows
-- [ ] Enhancements: widescreen, 120 fps, draw distance, FOV, settings menu
+- [ ] Enhancements: widescreen, 60 and 120 fps modes, draw distance, FOV, settings menu
 - [ ] HD texture pack, CRT filters
 - [ ] Bonus: 3D board models on board select, audio investigation
 
