@@ -5,6 +5,9 @@
 #include <vector>
 #include <array>
 #include <filesystem>
+#ifdef _WIN32
+#include <io.h>
+#endif
 #include <stdexcept>
 #include <cinttypes>
 
@@ -595,6 +598,23 @@ int main(int argc, char** argv) {
 
     recompui::programconfig::set_program_name(std::string{ game::program_name });
     recompui::programconfig::set_program_id(std::u8string{ game::program_id });
+
+#ifdef _WIN32
+    // Without a console, keep the log in log.txt in the app folder so players
+    // can send it along with a bug report.
+    if (GetConsoleWindow() == nullptr) {
+        std::filesystem::path log_dir = recompui::file::get_app_folder_path();
+        std::error_code log_ec;
+        std::filesystem::create_directories(log_dir, log_ec);
+        std::filesystem::path log_path = log_dir / "log.txt";
+        if (_wfreopen(log_path.c_str(), L"w", stderr) != nullptr) {
+            setvbuf(stderr, nullptr, _IONBF, 0);
+            // Share the one file handle so the two streams don't overwrite each other.
+            _dup2(_fileno(stderr), _fileno(stdout));
+            setvbuf(stdout, nullptr, _IONBF, 0);
+        }
+    }
+#endif
 
     // Initialize SDL audio and set the output frequency.
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
