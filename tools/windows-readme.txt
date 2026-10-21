@@ -17,6 +17,14 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.6: fixed the crash (black screen) when a race loads: the
+renderer could write a late frame over memory the game had just reused.
+60 fps is the default again (Settings > Graphics > Framerate,
+also set once for anyone v0.1.5 left on Original). Camera cuts no longer show
+blended or broken in-between frames. New Draw Distance setting in Settings >
+Graphics: Extended (default) draws about three times as far, Maximum draws the
+whole course with almost no fog, Original matches the N64. A bad audio frame
+no longer closes the game.
 Changes in v0.1.5: Framerate defaults to Original, which removes the bad frames
 on camera cuts. If you set it before, your setting is kept.
 Changes in v0.1.4: log.txt includes a crash report.

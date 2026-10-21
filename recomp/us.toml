@@ -76,3 +76,24 @@ text = "    { void game_pi_raw_dma(uint8_t*, recomp_context*); game_pi_raw_dma(r
 [[patches.hook]]
 func = "osPiRawStartDma_bootup"
 text = "    { void game_pi_raw_dma(uint8_t*, recomp_context*); game_pi_raw_dma(rdram, ctx); return; }"
+
+# Draw distance (src/game/draw_distance.cpp).
+# The land object picks which rows of the course grid to draw each frame and
+# stores the first and last row in the camera (+0x10C, +0x110).
+[[patches.hook]]
+func = "bootup_0063B4"
+before_vram = 0x810066FC
+text = "    { void game_draw_rows(uint8_t*, recomp_context*); game_draw_rows(rdram, ctx); }"
+
+# Far plane passed to guPerspectiveF ($f4, stored as the stack argument).
+[[patches.hook]]
+func = "bootup_0634B0"
+before_vram = 0x81063510
+text = "    { float game_far_scale(void); ctx->f4.fl *= game_far_scale(); }"
+
+# Distance limits for positioned objects: the camera scales its base cull
+# distances by $f0 (85 / fov) every frame.
+[[patches.hook]]
+func = "bootup_0631C0"
+before_vram = 0x81063254
+text = "    { float game_cull_scale(void); ctx->f0.fl *= game_cull_scale(); }"

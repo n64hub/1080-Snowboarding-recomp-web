@@ -11,3 +11,52 @@ index 8c8e5d1..8a0cd5d 100644
              // Check if the section isn't entirely in the loaded region
              if (ram_addr > it->loaded_ram_addr || (ram_addr + size) < (it->loaded_ram_addr + section.size)) {
                  fprintf(stderr,
+diff --git a/librecomp/src/rsp.cpp b/librecomp/src/rsp.cpp
+index 1cb3f6a..55569c8 100644
+--- a/librecomp/src/rsp.cpp
++++ b/librecomp/src/rsp.cpp
+@@ -54,6 +54,21 @@ bool recomp::rsp::run_task(uint8_t* rdram, const OSTask* task) {
+     // Ensure that the ucode exited correctly
+     if (exit_reason != RspExitReason::Broke) {
+         fprintf(stderr, "RSP ucode %" PRIu32 " exited unexpectedly. exit_reason: %i\n", task->t.type, static_cast<int>(exit_reason));
++        static int reports = 0;
++        if (reports < 5) {
++            reports++;
++            fprintf(stderr, "[rsp] ucode %08X ucode_data %08X data_ptr %08X data_size %X\n", (unsigned)(uintptr_t)task->t.ucode, (unsigned)(uintptr_t)task->t.ucode_data, (unsigned)(uintptr_t)task->t.data_ptr, (unsigned)task->t.data_size);
++            fprintf(stderr, "[rsp] dmem 0x00:");
++            for (int i = 0; i < 0x40; i++) fprintf(stderr, " %02X", dmem[i ^ 3]);
++            fprintf(stderr, "\n[rsp] rdram:   ");
++            uint32_t ud = (uint32_t)(uintptr_t)task->t.ucode_data & 0xFFFFF8;
++            for (int i = 0; i < 0x40; i++) fprintf(stderr, " %02X", rdram[(ud + i) ^ 3]);
++            fprintf(stderr, "\n");
++        }
++        // A failed audio task costs one audio frame; carry on instead of quitting the game.
++        if (task->t.type == M_AUDTASK) {
++            return true;
++        }
+         assert(exit_reason == RspExitReason::Broke);
+         return false;
+     }
+diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
+index 17d7a47..be07e31 100644
+--- a/ultramodern/src/events.cpp
++++ b/ultramodern/src/events.cpp
+@@ -368,7 +368,9 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+                 // start another graphics task until the RDP is also complete. Games usually preserve the RSP inputs until the RDP
+                 // is finished as well, so sending this early shouldn't be an issue in most cases.
+                 // If this causes issues then the logic can be replaced with responding to yield requests.
+-                sp_complete();
++                // 1080 frees and reuses framebuffer memory (heap, ROM loads) once the graphics task reports
++                // done, so report it only after the renderer has finished with RDRAM. Reporting it early let
++                // the renderer write a stale frame over newly loaded data when entering a race.
+                 ultramodern::measure_input_latency();
+ 
+                 PTR(u64) displaylist = task_action->task.t.data_ptr;
+@@ -378,6 +380,7 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+                 renderer_context->send_dl(&task_action->task);
+                 [[maybe_unused]] auto renderer_end = std::chrono::high_resolution_clock::now();
+ 
++                sp_complete();
+                 dp_complete();
+                 // TODO hook the parsed event up to the actual parsing point when a callback is added to RT64.
+                 ultramodern::extensions::on_displaylist_parsed(displaylist);

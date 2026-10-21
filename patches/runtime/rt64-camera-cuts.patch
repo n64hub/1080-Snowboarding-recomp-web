@@ -1,0 +1,117 @@
+diff --git a/src/hle/rt64_game_frame.cpp b/src/hle/rt64_game_frame.cpp
+index 87392d0..91b73e2 100644
+--- a/src/hle/rt64_game_frame.cpp
++++ b/src/hle/rt64_game_frame.cpp
+@@ -2,6 +2,9 @@
+ // RT64
+ //
+ 
++#include <algorithm>
++#include <cmath>
++
+ #include "common/rt64_math.h"
+ 
+ #include "rt64_game_frame.h"
+@@ -256,6 +259,9 @@ namespace RT64 {
+         tileInterpolationUsed = false;
+         lookAtInterpolationUsed = false;
+         matched = true;
++        cameraJumpDistance = 0.0f;
++        cameraJumpAngle = 0.0f;
++        cameraCut = false;
+ 
+         thread_local std::unordered_map<uint32_t, ModifiedBuffers> workloadsModified;
+         workloadsModified.clear();
+@@ -375,6 +381,24 @@ namespace RT64 {
+         matchScenes(perspectiveScenes, prevFrame.perspectiveScenes);
+         matchScenes(orthographicScenes, prevFrame.orthographicScenes);
+ 
++        // A camera cut: the view jumped too far to be motion. Blending across it draws
++        // in-between frames from nowhere, so show this frame as-is instead.
++        cameraCut = (cameraJumpDistance > CameraCutDistance) || (cameraJumpAngle > CameraCutAngle);
++        if (cameraCut) {
++            for (uint32_t w = 0; w < workloads.size(); w++) {
++                frameMap.workloads[workloads[w]].mapped = false;
++            }
++
++            for (auto &it : workloadsModified) {
++                Workload &workload = workloadQueue.workloads[it.first];
++                std::fill(workload.drawData.velFloats.begin(), workload.drawData.velFloats.end(), 0.0f);
++                std::fill(workload.drawData.tcVelFloats.begin(), workload.drawData.tcVelFloats.end(), 0.0f);
++            }
++
++            tileInterpolationUsed = false;
++            lookAtInterpolationUsed = false;
++        }
++
+         if (!workloadsModified.empty()) {
+             thread_local std::vector<BufferUploader::Upload> uploads;
+             uploads.clear();
+@@ -481,6 +505,21 @@ namespace RT64 {
+                 }
+ 
+                 if (viewProjMap.mapped) {
++                    // Measure how far the camera moved and turned since the previous frame.
++                    const hlslpp::float4x4 curInverse = hlslpp::inverse(curView);
++                    const hlslpp::float4x4 prevInverse = hlslpp::inverse(prevView);
++                    const hlslpp::float3 curEye = curInverse[3].xyz;
++                    const hlslpp::float3 prevEye = prevInverse[3].xyz;
++                    const hlslpp::float3 curForward = hlslpp::normalize(curInverse[2].xyz);
++                    const hlslpp::float3 prevForward = hlslpp::normalize(prevInverse[2].xyz);
++                    const float distance = hlslpp::length(curEye - prevEye);
++                    const float cosAngle = std::min(1.0f, std::max(-1.0f, float(hlslpp::dot(curForward, prevForward))));
++                    const float angle = std::acos(cosAngle);
++                    if (std::isfinite(distance) && std::isfinite(angle)) {
++                        cameraJumpDistance = std::max(cameraJumpDistance, distance);
++                        cameraJumpAngle = std::max(cameraJumpAngle, angle);
++                    }
++
+                     if (firstPrevWorkloadMap != nullptr) {
+                         const GameFrameMap::ViewProjectionMap &prevViewProjMap = firstPrevWorkloadMap->viewProjections[prevProj.transformsIndex];
+                         viewProjMap.rigidBody = prevViewProjMap.rigidBody;
+diff --git a/src/hle/rt64_game_frame.h b/src/hle/rt64_game_frame.h
+index 00a72f6..3311543 100644
+--- a/src/hle/rt64_game_frame.h
++++ b/src/hle/rt64_game_frame.h
+@@ -122,6 +122,15 @@ namespace RT64 {
+         std::vector<uint32_t> workloads;
+         bool matched = false;
+ 
++        // Largest camera change against the previous frame, used to spot camera cuts.
++        float cameraJumpDistance = 0.0f;
++        float cameraJumpAngle = 0.0f;
++        bool cameraCut = false;
++
++        // Camera movement in one game frame beyond which it counts as a cut.
++        static constexpr float CameraCutDistance = 40.0f;
++        static constexpr float CameraCutAngle = 1.2f;
++
+         bool areFramebufferPairsCompatible(const WorkloadQueue &workloadQueue, const GameIndices::FramebufferPair &first, const GameIndices::FramebufferPair &second);
+         bool isSceneCompatible(const WorkloadQueue &workloadQueue, const GameScene &scene, const GameIndices::Projection &proj);
+         void set(WorkloadQueue &workloadQueue, const uint32_t *workloadIndices, uint32_t indicesCount);
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+index 89f2425..5c83dbe 100644
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -990,6 +990,7 @@ namespace RT64 {
+                     matchingProfiler.reset();
+                     matchingProfiler.start();
+                     curFrame.match(ext.workloadGraphicsWorker, *this, prevFrame, ext.workloadVelocityUploader, velocityUploaderUsed, tileInterpolationUsed, lookAtInterpolationUsed);
++                    if (getenv("RT64_LOG_CAMERA")) fprintf(stderr, "[camera] dist %.3f angle %.3f%s\n", curFrame.cameraJumpDistance, curFrame.cameraJumpAngle, curFrame.cameraCut ? " cut" : "");
+                     matchingProfiler.end();
+                     matchingProfiler.log();
+ 
+diff --git a/src/render/rt64_transform_processor.cpp b/src/render/rt64_transform_processor.cpp
+index cd8004d..d5e208f 100644
+--- a/src/render/rt64_transform_processor.cpp
++++ b/src/render/rt64_transform_processor.cpp
+@@ -74,7 +74,8 @@ namespace RT64 {
+         uploads.clear();
+ 
+         for (uint32_t w : p.curFrame->workloads) {
+-            const bool prevFrameValid = (p.prevFrame != nullptr);
++            // Only workloads matched against the previous frame filled the interpolated lists.
++            const bool prevFrameValid = (p.prevFrame != nullptr) && p.curFrame->frameMap.workloads[w].mapped;
+             Workload &workload = p.workloadQueue->workloads[w];
+             const DrawData &drawData = workload.drawData;
+             DrawBuffers &drawBuffers = workload.drawBuffers;

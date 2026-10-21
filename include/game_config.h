@@ -3,6 +3,8 @@
 
 #include <string_view>
 
+namespace recomp::config { class Config; }
+
 namespace game {
     constexpr std::u8string_view program_id = u8"1080SnowboardingRecompiled";
     constexpr std::string_view program_name = "1080 Snowboarding: Recompiled";
@@ -12,6 +14,9 @@ namespace game {
 
     // Main volume from the sound tab, 0 to 100.
     int get_main_volume();
+
+    // Adds the Draw Distance option to the graphics tab (draw_distance.cpp).
+    void add_draw_distance_option(recomp::config::Config& graphics);
 }
 
 #endif

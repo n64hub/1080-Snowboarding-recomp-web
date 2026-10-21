@@ -17,7 +17,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(Git QUIET)
 foreach(runtime_patch IN ITEMS
         "lib/N64ModernRuntime|patches/runtime/N64ModernRuntime.patch"
-        "lib/RecompFrontend|patches/runtime/RecompFrontend.patch")
+        "lib/RecompFrontend|patches/runtime/RecompFrontend.patch"
+        "lib/rt64|patches/runtime/rt64-camera-cuts.patch")
     string(REPLACE "|" ";" runtime_patch_parts "${runtime_patch}")
     list(GET runtime_patch_parts 0 patch_dir)
     list(GET runtime_patch_parts 1 patch_file)
@@ -128,6 +129,7 @@ set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/game/config.cpp
     ${CMAKE_SOURCE_DIR}/src/game/libultra_extras.cpp
     ${CMAKE_SOURCE_DIR}/src/game/boot_residue.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/draw_distance.cpp
 
     ${GAME_GENERATED_DIR}/rsp/aspMain.cpp
 )

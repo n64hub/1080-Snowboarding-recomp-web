@@ -1,12 +1,14 @@
 #include "game_config.h"
 
 #include <filesystem>
+#include <fstream>
 #include <variant>
 
 #include "recompinput/input_mapping.h"
 #include "recompinput/input_types.h"
 #include "recompui/config.h"
 #include "recompui/recompui.h"
+#include "ultramodern/config.hpp"
 #include "util/file.h"
 
 namespace {
@@ -45,7 +47,7 @@ void game::init_config() {
     general_options.has_mouse_sensitivity = false;
     recompui::config::create_general_tab(general_options);
 
-    recompui::config::create_graphics_tab();
+    game::add_draw_distance_option(recompui::config::create_graphics_tab());
 
     set_control_descriptions();
     recompui::config::create_controls_tab();
@@ -55,6 +57,23 @@ void game::init_config() {
     recompui::config::create_mods_tab();
 
     recompui::config::finalize();
+
+    // v0.1.5 saved Framerate = Original as its default. Move those players to
+    // the new 60 fps default once; a choice made after this is kept.
+    if (!app_dir.empty()) {
+        std::filesystem::path marker = app_dir / "framerate_default_v2";
+        if (!std::filesystem::exists(marker)) {
+            namespace gfx = recompui::config::graphics::options;
+            auto& graphics = recompui::config::get_graphics_config();
+            const uint32_t original = static_cast<uint32_t>(ultramodern::renderer::RefreshRate::Original);
+            if (std::get<uint32_t>(graphics.get_option_value(gfx::rr_option)) == original) {
+                graphics.set_option_value(gfx::rr_option, static_cast<uint32_t>(ultramodern::renderer::RefreshRate::Manual));
+                graphics.set_option_value(gfx::rr_manual_value, 60.0);
+                graphics.save_config();
+            }
+            std::ofstream{ marker };
+        }
+    }
 }
 
 int game::get_main_volume() {
