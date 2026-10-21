@@ -17,6 +17,8 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.5: Framerate defaults to Original, which removes the bad frames
+on camera cuts. If you set it before, your setting is kept.
 Changes in v0.1.4: log.txt includes a crash report.
 Changes in v0.1.3: writes log.txt for bug reports.
 Changes in v0.1.2: Match Race no longer crashes at character select, board

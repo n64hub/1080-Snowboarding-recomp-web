@@ -15,7 +15,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Small fixes to the runtime submodule (see patches/runtime/). Applied once;
 # a patch that is already in place is left alone.
 find_package(Git QUIET)
-foreach(runtime_patch IN ITEMS "lib/N64ModernRuntime|patches/runtime/N64ModernRuntime.patch")
+foreach(runtime_patch IN ITEMS
+        "lib/N64ModernRuntime|patches/runtime/N64ModernRuntime.patch"
+        "lib/RecompFrontend|patches/runtime/RecompFrontend.patch")
     string(REPLACE "|" ";" runtime_patch_parts "${runtime_patch}")
     list(GET runtime_patch_parts 0 patch_dir)
     list(GET runtime_patch_parts 1 patch_file)

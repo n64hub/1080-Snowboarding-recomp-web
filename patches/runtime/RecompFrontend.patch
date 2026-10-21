@@ -1,0 +1,13 @@
+diff --git a/recompui/src/config/ui_config_tab_graphics.cpp b/recompui/src/config/ui_config_tab_graphics.cpp
+index 7332f2f..ebed18f 100644
+--- a/recompui/src/config/ui_config_tab_graphics.cpp
++++ b/recompui/src/config/ui_config_tab_graphics.cpp
+@@ -304,7 +304,7 @@ namespace recompui {
+                 "Framerate",
+                 get_framerate_text(60),
+                 refresh_rate_options,
+-                ultramodern::renderer::RefreshRate::Display
++                ultramodern::renderer::RefreshRate::Original
+             );
+ 
+             config.add_number_option(
