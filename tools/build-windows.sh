@@ -34,6 +34,8 @@ mkdir -p "$PKG"
 cd "$ROOT/build/win"
 cp 1080SnowboardingRecompiled.exe SDL2.dll dxcompiler.dll dxil.dll recompcontrollerdb.txt "$PKG/"
 cp -r assets "$PKG/"
+VERSION=$(sed -n 's/^GAME_VERSION:STRING=//p' CMakeCache.txt)
+sed "1s/(early)/(v$VERSION, early)/" "$ROOT/tools/windows-readme.txt" > "$PKG/README.txt"
 "$LLVM_MINGW/bin/llvm-strip" "$PKG/1080SnowboardingRecompiled.exe"
 # Same program with a console window that shows the log, for troubleshooting.
 python3 - "$PKG/1080SnowboardingRecompiled.exe" "$PKG/1080SnowboardingRecompiled-log.exe" <<'PY'

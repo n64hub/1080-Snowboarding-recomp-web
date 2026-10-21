@@ -614,7 +614,10 @@ int main(int argc, char** argv) {
             setvbuf(stdout, nullptr, _IONBF, 0);
         }
     }
+    fprintf(stderr, "1080 Snowboarding: Recompiled %s\n", version_string.c_str());
 #endif
+    void install_crash_log();
+    install_crash_log();
 
     // Initialize SDL audio and set the output frequency.
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {

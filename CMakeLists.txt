@@ -119,6 +119,7 @@ add_executable(1080SnowboardingRecompiled)
 
 set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/main/main.cpp
+    ${CMAKE_SOURCE_DIR}/src/main/crash_log.cpp
     ${CMAKE_SOURCE_DIR}/src/main/theme.cpp
     ${CMAKE_SOURCE_DIR}/src/main/register_overlays.cpp
 
