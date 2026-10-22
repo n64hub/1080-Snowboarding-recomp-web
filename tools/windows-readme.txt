@@ -17,6 +17,11 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.8: Fixed the in-between frames made for 60 and 120 fps. The game
+moves its near and far planes every frame, and blending them made single frames
+show the hills fogged over or distant scenery drawn in front, which looked like
+the background flickering in the fog.
+
 Changes in v0.1.7: Draw Distance defaults to Maximum (the whole course is drawn,
 so nothing builds in the distance and the far edge no longer flickers through
 the fog). Extended now reaches further too. If v0.1.6 saved Extended, it moves

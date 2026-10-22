@@ -101,6 +101,26 @@ index 89f2425..5c83dbe 100644
                      matchingProfiler.end();
                      matchingProfiler.log();
  
+diff --git a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projection_processor.cpp
+index e842dcc..9feb551 100644
+--- a/src/render/rt64_projection_processor.cpp
++++ b/src/render/rt64_projection_processor.cpp
+@@ -129,6 +129,15 @@ namespace RT64 {
+                 if (interpolateProjection) {
+                     projMatrix = lerpMatrix(adjustedPrevProj, curProjTransform, p.curFrameWeight);
+                     prevProjTransform = lerpMatrix(adjustedPrevProj, curProjTransform, p.prevFrameWeight);
++
++                    // Keep the depth column (near and far planes) of the current frame. Some games move the near and
++                    // far planes every frame and place fog relative to them. The fog settings aren't interpolated, so
++                    // blending the planes made fog and depth wrong on the in-between frames (whole hills fogged over,
++                    // distant scenery drawn in front).
++                    for (int r = 0; r < 4; r++) {
++                        projMatrix[r][2] = curProjTransform[r][2];
++                        prevProjTransform[r][2] = curProjTransform[r][2];
++                    }
+                 }
+                 else {
+                     projMatrix = curProjTransform;
 diff --git a/src/render/rt64_transform_processor.cpp b/src/render/rt64_transform_processor.cpp
 index cd8004d..d5e208f 100644
 --- a/src/render/rt64_transform_processor.cpp
