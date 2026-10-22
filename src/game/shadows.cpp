@@ -105,22 +105,63 @@ uint32_t fade_calls = 0;
 // The shadow is flattened onto exactly the plane the game found under the
 // rider. Easing that plane's tilt (v0.1.11) made the shadow sink into the
 // snow in places and slide into place over a few frames, so it is not done.
+
+// While the game builds the shadow matrix, the ground plane under the rider is
+// raised a little toward the rider so the depth test (game_shadow_render_mode)
+// doesn't lose the shadow in the snow it lies on, then put back.
+constexpr float shadow_lift = 0.5f;
+// The game looks the shadow's render mode up when a course loads, so whether
+// the shadow is depth tested follows the setting at that time, not the current one.
+std::atomic<bool> shadow_depth_tested{ false };
+gpr lifted_plane = 0;
+uint32_t lifted_plane_d = 0;
+
+void restore_lifted_plane(uint8_t* rdram) {
+    if (lifted_plane != 0) {
+        MEM_W(12, lifted_plane) = lifted_plane_d;
+        lifted_plane = 0;
+    }
+}
 }
 
 // Called with the normalized shadow direction (x, y, z floats) at $sp + 0x58.
 // The ground plane pointer is in the caller's argument slot at $sp + 0x74.
 extern "C" void game_shadow_direction(uint8_t* rdram, recomp_context* ctx) {
-    if (mode() != ShadowMode::UnderRider) {
+    restore_lifted_plane(rdram);
+    gpr sp = ctx->r29;
+    if (mode() == ShadowMode::UnderRider) {
+        gpr dir = sp + 0x58;
+        // Keep the sign of the vertical part: flipping the direction would flip the
+        // sign of w in the shadow matrix and clip the shadow away.
+        float y = load_float(rdram, dir + 0x4);
+        store_float(rdram, dir + 0x0, 0.0f);
+        store_float(rdram, dir + 0x4, std::signbit(y) ? -1.0f : 1.0f);
+        store_float(rdram, dir + 0x8, 0.0f);
+    }
+    if (!shadow_depth_tested.load(std::memory_order_relaxed)) {
         return;
     }
-    gpr sp = ctx->r29;
-    gpr dir = sp + 0x58;
-    // Keep the sign of the vertical part: flipping the direction would flip the
-    // sign of w in the shadow matrix and clip the shadow away.
-    float y = load_float(rdram, dir + 0x4);
-    store_float(rdram, dir + 0x0, 0.0f);
-    store_float(rdram, dir + 0x4, std::signbit(y) ? -1.0f : 1.0f);
-    store_float(rdram, dir + 0x8, 0.0f);
+
+    // Raise the plane toward the rider. The plane is in the rider's
+    // coordinates times the course scale, like in height_above_ground.
+    gpr plane = static_cast<int32_t>(MEM_W(0x74, sp));
+    gpr rider = plane - rider_ground_plane;   // the caller passes rider + 0x9D8
+    float k = -world_scale.load(std::memory_order_relaxed);
+    float nx = load_float(rdram, plane), ny = load_float(rdram, plane + 4), nz = load_float(rdram, plane + 8), d = load_float(rdram, plane + 12);
+    float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+    if (k == 0.0f || len < 1e-6f) {
+        return;
+    }
+    float px = load_float(rdram, rider + rider_pos), py = load_float(rdram, rider + rider_pos + 4), pz = load_float(rdram, rider + rider_pos + 8);
+    float side = k * (nx * px + ny * py + nz * pz) + d;
+    lifted_plane = plane;
+    lifted_plane_d = MEM_W(12, plane);
+    store_float(rdram, plane + 12, d - std::copysign(shadow_lift * len, side));
+}
+
+// Called right after the shadow matrix is built.
+extern "C" void game_shadow_matrix_built(uint8_t* rdram, recomp_context* ctx) {
+    restore_lifted_plane(rdram);
 }
 
 // Called with the course scale in $f6 while a rider checks how high it is above
@@ -147,4 +188,24 @@ extern "C" void game_shadow_alpha(uint8_t* rdram, recomp_context* ctx) {
     }
     fade.last_call = fade_calls;
     ctx->f10.fl *= fade.value;
+}
+
+// Called with a render mode the game just looked up in $v0. The shadow's mode
+// (0x41C8: blended, no depth test) draws it over hills that hide the rider.
+// Under Rider adds a depth test so the snow in front covers it. A decal depth
+// test would cut the shadow off wherever the slope curves away from the plane
+// it lies on, so the plane is lifted a little instead (game_shadow_direction).
+extern "C" void game_shadow_render_mode(uint8_t* rdram, recomp_context* ctx) {
+    constexpr uint32_t z_cmp = 0x10;
+    constexpr uint32_t zmode_mask = 0xC00;
+    constexpr uint32_t zmode_xlu = 0x800;
+    uint32_t v = static_cast<uint32_t>(ctx->r2);
+    if ((v & 0xFFFF) == 0x41C8) {
+        bool depth_test = (mode() == ShadowMode::UnderRider);
+        shadow_depth_tested.store(depth_test, std::memory_order_relaxed);
+        if (depth_test) {
+            v = (v & ~zmode_mask) | z_cmp | zmode_xlu;
+            ctx->r2 = static_cast<int32_t>(v);
+        }
+    }
 }
