@@ -85,11 +85,12 @@ func = "bootup_0063B4"
 before_vram = 0x810066FC
 text = "    { void game_draw_rows(uint8_t*, recomp_context*); game_draw_rows(rdram, ctx); }"
 
-# Far plane passed to guPerspectiveF ($f4, stored as the stack argument).
+# Far plane passed to the camera's perspective function ($f4, stored as the
+# stack argument), and its field of view in degrees ($a1, src/game/camera.cpp).
 [[patches.hook]]
 func = "bootup_0634B0"
 before_vram = 0x81063510
-text = "    { float game_far_scale(void); ctx->f4.fl *= game_far_scale(); }"
+text = "    { float game_far_scale(void); ctx->f4.fl *= game_far_scale(); } { void game_fov(recomp_context*); game_fov(ctx); }"
 
 # Distance limits for positioned objects: the camera scales its base cull
 # distances by $f0 (85 / fov) every frame.

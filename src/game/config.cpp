@@ -49,6 +49,7 @@ void game::init_config() {
 
     recomp::config::Config& graphics_tab = recompui::config::create_graphics_tab();
     game::add_draw_distance_option(graphics_tab);
+    game::add_fov_option(graphics_tab);
     game::add_shadow_option(graphics_tab);
 
     set_control_descriptions();

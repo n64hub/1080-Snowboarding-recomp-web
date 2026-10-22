@@ -131,6 +131,7 @@ set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/game/boot_residue.cpp
     ${CMAKE_SOURCE_DIR}/src/game/draw_distance.cpp
     ${CMAKE_SOURCE_DIR}/src/game/shadows.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/camera.cpp
 
     ${GAME_GENERATED_DIR}/rsp/aspMain.cpp
 )
