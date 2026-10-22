@@ -108,10 +108,11 @@ uint32_t fade_calls = 0;
 
 // While the game builds the shadow matrix, the ground plane under the rider is
 // raised a little toward the rider so the depth test (game_shadow_draw_end)
-// doesn't lose the shadow in the snow it lies on, then put back.
-// 0.5 still let bumps in the snow next to the triangle under the rider cut
-// pieces out of the shadow; 2 (the rider's middle is about 15 up) does not.
-constexpr float shadow_lift = 2.0f;
+// doesn't lose the shadow in the snow it lies on, then put back. A big lift
+// (2 in v0.1.19) put the shadow above the board and let it show over crests, so
+// the lift is small and the shadow is also pulled toward the camera for the
+// depth test (game_shadow_matrix_built), which moves nothing on screen.
+constexpr float shadow_lift = 0.25f;
 gpr lifted_plane = 0;
 uint32_t lifted_plane_d = 0;
 
@@ -158,9 +159,93 @@ extern "C" void game_shadow_direction(uint8_t* rdram, recomp_context* ctx) {
     store_float(rdram, plane + 12, d - std::copysign(shadow_lift * len, side));
 }
 
-// Called right after the shadow matrix is built.
+namespace {
+// The game's global draw state (bootup .data + 0x3C168).
+constexpr uint32_t draw_state_offset = 0x3C168;
+constexpr uint32_t bootup_data_section = 4;
+constexpr gpr draw_state_view_projection = 0x60;   // 4x4 floats, world to clip space
+
+gpr draw_state() {
+    return static_cast<int32_t>(section_addresses[bootup_data_section] + draw_state_offset);
+}
+
+// The shadow is drawn this fraction of the way toward the camera. Moving
+// geometry along the lines of sight leaves it where it is on screen but nearer
+// in the depth buffer, so bumps in the snow it lies on don't cut into it while
+// hills in front of it still hide it. Too much and it covers the board.
+constexpr float shadow_depth_pull = 0.01f;
+
+// Position of the camera in world space: the point the view-projection matrix
+// (row vectors) sends to x = y = w = 0. False if it can't be found.
+bool camera_position(uint8_t* rdram, float eye[3]) {
+    gpr vp = draw_state() + draw_state_view_projection;
+    float m[4][4];
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            m[r][c] = load_float(rdram, vp + (r * 4 + c) * 4);
+        }
+    }
+    // Solve e * A = b, where A has columns 0, 1 and 3 of the top 3x3 rows and b is minus row 3.
+    const int cols[3] = { 0, 1, 3 };
+    double a[3][3], b[3];
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            a[i][j] = m[i][cols[j]];
+        }
+        b[i] = -m[3][cols[i]];
+    }
+    // e_i: Cramer's rule on the transposed system sum_i e_i a[i][j] = b[j].
+    auto det3 = [](double t[3][3]) {
+        return t[0][0] * (t[1][1] * t[2][2] - t[1][2] * t[2][1]) - t[0][1] * (t[1][0] * t[2][2] - t[1][2] * t[2][0]) + t[0][2] * (t[1][0] * t[2][1] - t[1][1] * t[2][0]);
+    };
+    double at[3][3];
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            at[i][j] = a[j][i];
+        }
+    }
+    double d = det3(at);
+    if (!std::isfinite(d) || std::fabs(d) < 1e-20) {
+        return false;
+    }
+    for (int k = 0; k < 3; k++) {
+        double t[3][3];
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                t[i][j] = (j == k) ? b[i] : at[i][j];
+            }
+        }
+        eye[k] = static_cast<float>(det3(t) / d);
+        if (!std::isfinite(eye[k])) {
+            return false;
+        }
+    }
+    return true;
+}
+}
+
+// Called right after the shadow matrix is built ($sp + 0x1C points at it, 4x4 floats
+// for row vectors, flattening world positions onto the ground plane).
 extern "C" void game_shadow_matrix_built(uint8_t* rdram, recomp_context* ctx) {
     restore_lifted_plane(rdram);
+    if (mode() != ShadowMode::UnderRider) {
+        return;
+    }
+    float eye[3];
+    if (!camera_position(rdram, eye)) {
+        return;
+    }
+    // Follow the flattening with a scale toward the camera: p -> eye + s * (p - eye).
+    // For homogeneous rows (xyz, w) that is (s * xyz + (1 - s) * w * eye, w).
+    gpr matrix = static_cast<int32_t>(MEM_W(0x1C, ctx->r29));
+    float s = 1.0f - shadow_depth_pull;
+    for (int r = 0; r < 4; r++) {
+        gpr row = matrix + r * 16;
+        float w = load_float(rdram, row + 12);
+        for (int c = 0; c < 3; c++) {
+            store_float(rdram, row + c * 4, s * load_float(rdram, row + c * 4) + (1.0f - s) * w * eye[c]);
+        }
+    }
 }
 
 // Called with the course scale in $f6 while a rider checks how high it is above
@@ -190,10 +275,8 @@ extern "C" void game_shadow_alpha(uint8_t* rdram, recomp_context* ctx) {
 }
 
 namespace {
-// The game's global draw state (bootup .data + 0x3C168). Its +0x254 -> +0x158
-// is the current display list builder, whose +0xC points at {commands, count}.
-constexpr uint32_t draw_state_offset = 0x3C168;
-constexpr uint32_t bootup_data_section = 4;
+// The draw state's +0x254 -> +0x158 is the current display list builder, whose
+// +0xC points at {commands, count}.
 
 bool is_rdram_pointer(gpr p) {
     uint32_t u = static_cast<uint32_t>(p);
@@ -202,7 +285,7 @@ bool is_rdram_pointer(gpr p) {
 
 // Address of the {commands, count} pair, or 0.
 gpr display_list_counter(uint8_t* rdram) {
-    gpr state = static_cast<int32_t>(MEM_W(0x254, static_cast<gpr>(static_cast<int32_t>(section_addresses[bootup_data_section] + draw_state_offset))));
+    gpr state = static_cast<int32_t>(MEM_W(0x254, draw_state()));
     if (!is_rdram_pointer(state)) {
         return 0;
     }

@@ -17,6 +17,14 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.20: The rider's shadow no longer judders at 60 and 120 fps. The
+frame smoothing kept losing track of it, so on in-between frames it jumped back
+to the last real frame while the rider moved on (this affected both shadow
+settings). Under Rider: the shadow sits right on the snow again, so it no
+longer covers the board or shows over the top of a crest the rider has gone
+behind; it is kept clear of the snow it lies on in a way that doesn't move it
+on screen.
+
 Changes in v0.1.19: The Under Rider shadow no longer loses pieces (which
 looked like flicker) on bumpy snow; it now sits a little higher above the snow.
 The board's part of the shadow, which still showed faintly through hills, is

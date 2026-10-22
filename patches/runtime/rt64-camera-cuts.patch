@@ -1,5 +1,5 @@
 diff --git a/src/hle/rt64_game_frame.cpp b/src/hle/rt64_game_frame.cpp
-index 87392d0..91b73e2 100644
+index 87392d0..3db896f 100644
 --- a/src/hle/rt64_game_frame.cpp
 +++ b/src/hle/rt64_game_frame.cpp
 @@ -2,6 +2,9 @@
@@ -12,7 +12,50 @@ index 87392d0..91b73e2 100644
  #include "common/rt64_math.h"
  
  #include "rt64_game_frame.h"
-@@ -256,6 +259,9 @@ namespace RT64 {
+@@ -220,9 +223,16 @@ namespace RT64 {
+         TransformMatchResult matchResult;
+ 
+         // Do not accept a match between these transforms if the determinant is different, which indicates they're mirrored from each other.
++        // A transform that flattens geometry onto a plane (such as a planar shadow) has a
++        // determinant of zero plus rounding noise, so its sign says nothing and is ignored.
++        auto isFlat = [](const hlslpp::float4x4 &m, float det) {
++            const float scale = std::max(std::max(float(hlslpp::length(m[0].xyz)), float(hlslpp::length(m[1].xyz))), float(hlslpp::length(m[2].xyz)));
++            return fabsf(det) <= 1e-3f * scale * scale * scale;
++        };
++
+         const float m0det = hlslpp::determinant(extract3x3(prevTransform));
+         const float m1det = hlslpp::determinant(extract3x3(curTransform));
+-        if ((m0det * m1det) < 0.0f) {
++        if (((m0det * m1det) < 0.0f) && !isFlat(prevTransform, m0det) && !isFlat(curTransform, m1det)) {
+             return matchResult;
+         }
+ 
+@@ -236,10 +246,21 @@ namespace RT64 {
+         matchResult.positionDifference = hlslpp::length(curPos - prevPos);
+ 
+         // Compute the dot product difference between the normalized XYZ vectors of the 3x3 matrices.
++        // An axis flattened to (nearly) zero length has no direction to compare.
++        auto axisDifference = [](const hlslpp::float3 &a, const hlslpp::float3 &b) {
++            const float la = hlslpp::length(a);
++            const float lb = hlslpp::length(b);
++            if ((la < 1e-6f) || (lb < 1e-6f)) {
++                return 0.0f;
++            }
++
++            return 1.0f - float(hlslpp::dot(a / la, b / lb));
++        };
++
+         matchResult.orientationDifference =
+-            (1.0f - hlslpp::dot(hlslpp::normalize(curTransform[0].xyz), hlslpp::normalize(prevTransform[0].xyz))) +
+-            (1.0f - hlslpp::dot(hlslpp::normalize(curTransform[1].xyz), hlslpp::normalize(prevTransform[1].xyz))) +
+-            (1.0f - hlslpp::dot(hlslpp::normalize(curTransform[2].xyz), hlslpp::normalize(prevTransform[2].xyz)));
++            axisDifference(curTransform[0].xyz, prevTransform[0].xyz) +
++            axisDifference(curTransform[1].xyz, prevTransform[1].xyz) +
++            axisDifference(curTransform[2].xyz, prevTransform[2].xyz);
+ 
+         // Compute the difference between the screen-space position of both transforms on their respective projections.
+         hlslpp::float4 prevScreenPos = hlslpp::mul(prevTransform[3], prevViewProj);
+@@ -256,6 +277,9 @@ namespace RT64 {
          tileInterpolationUsed = false;
          lookAtInterpolationUsed = false;
          matched = true;
@@ -22,7 +65,7 @@ index 87392d0..91b73e2 100644
  
          thread_local std::unordered_map<uint32_t, ModifiedBuffers> workloadsModified;
          workloadsModified.clear();
-@@ -375,6 +381,24 @@ namespace RT64 {
+@@ -375,6 +399,24 @@ namespace RT64 {
          matchScenes(perspectiveScenes, prevFrame.perspectiveScenes);
          matchScenes(orthographicScenes, prevFrame.orthographicScenes);
  
@@ -47,7 +90,7 @@ index 87392d0..91b73e2 100644
          if (!workloadsModified.empty()) {
              thread_local std::vector<BufferUploader::Upload> uploads;
              uploads.clear();
-@@ -481,6 +505,21 @@ namespace RT64 {
+@@ -481,6 +523,21 @@ namespace RT64 {
                  }
  
                  if (viewProjMap.mapped) {
@@ -89,6 +132,31 @@ index 00a72f6..3311543 100644
          bool areFramebufferPairsCompatible(const WorkloadQueue &workloadQueue, const GameIndices::FramebufferPair &first, const GameIndices::FramebufferPair &second);
          bool isSceneCompatible(const WorkloadQueue &workloadQueue, const GameScene &scene, const GameIndices::Projection &proj);
          void set(WorkloadQueue &workloadQueue, const uint32_t *workloadIndices, uint32_t indicesCount);
+diff --git a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
+index a870166..c70fd18 100644
+--- a/src/hle/rt64_vi.cpp
++++ b/src/hle/rt64_vi.cpp
+@@ -167,7 +167,19 @@ namespace RT64 {
+             return FullRate / factors[0];
+         }
+         else {
+-            return 0;
++            // The game took a varying number of VIs per frame (2 then 3, say). Interpolate at the
++            // rate of the slowest of those frames instead of turning frame interpolation off for
++            // the scene. That keeps the rate one of the whole fractions of 60 the rest of the
++            // interpolation code expects.
++            uint32_t slowest = 0;
++            for (uint32_t factor : factors) {
++                if (factor == 0) {
++                    return 0;
++                }
++                slowest = std::max(slowest, factor);
++            }
++            const uint32_t FullRate = 60;
++            return (slowest <= 6) ? (FullRate / slowest) : 0;
+         }
+     }
+ 
 diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
 index 89f2425..5c83dbe 100644
 --- a/src/hle/rt64_workload_queue.cpp
@@ -148,28 +216,3 @@ index cd8004d..d5e208f 100644
              Workload &workload = p.workloadQueue->workloads[w];
              const DrawData &drawData = workload.drawData;
              DrawBuffers &drawBuffers = workload.drawBuffers;
-diff --git a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
-index a870166..c70fd18 100644
---- a/src/hle/rt64_vi.cpp
-+++ b/src/hle/rt64_vi.cpp
-@@ -167,7 +167,19 @@ namespace RT64 {
-             return FullRate / factors[0];
-         }
-         else {
--            return 0;
-+            // The game took a varying number of VIs per frame (2 then 3, say). Interpolate at the
-+            // rate of the slowest of those frames instead of turning frame interpolation off for
-+            // the scene. That keeps the rate one of the whole fractions of 60 the rest of the
-+            // interpolation code expects.
-+            uint32_t slowest = 0;
-+            for (uint32_t factor : factors) {
-+                if (factor == 0) {
-+                    return 0;
-+                }
-+                slowest = std::max(slowest, factor);
-+            }
-+            const uint32_t FullRate = 60;
-+            return (slowest <= 6) ? (FullRate / slowest) : 0;
-         }
-     }
- 
