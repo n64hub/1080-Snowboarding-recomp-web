@@ -373,3 +373,23 @@ extern "C" void game_shadow_draw_end(uint8_t* rdram, recomp_context* ctx) {
         }
     }
 }
+
+// Called with a render mode the game just looked up in $v0 (when a course loads).
+// Besides the shadow, the game draws a small picture of the board on the snow
+// under each rider, with a blended mode that has no depth test (0x41C8), so it
+// showed in front of hills the rider had gone behind. Under Rider gives it a
+// depth test. (v0.1.17 did this believing it was the shadow; it was removed in
+// v0.1.18.) The lookup happens when a course loads, so a change of setting
+// applies to this from the next course.
+extern "C" void game_board_mark_render_mode(uint8_t* rdram, recomp_context* ctx) {
+    constexpr uint32_t board_mark_mode = 0x41C8;
+    uint32_t v = static_cast<uint32_t>(ctx->r2);
+    if ((v & 0xFFFF) != board_mark_mode || mode() != ShadowMode::UnderRider) {
+        return;
+    }
+    // A decal: it lies on the snow, so it is drawn where it meets the snow in
+    // front of it and hidden where something nearer covers it.
+    constexpr uint32_t zmode_decal = 0xC00;
+    v = (v & ~zmode_mask) | z_cmp | zmode_decal;
+    ctx->r2 = static_cast<int32_t>(v);
+}

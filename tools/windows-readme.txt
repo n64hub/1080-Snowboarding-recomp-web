@@ -17,6 +17,10 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.22: Under Rider: the faint picture of the board that the game
+draws on the snow under the rider no longer shows in front of a hill the rider
+has gone behind. It takes effect from the next course you load.
+
 Changes in v0.1.21: Under Rider flattens the shadow straight onto the snow under
 the rider instead of straight down. On steep walls and banks the old way
 stretched the shadow into long thin slivers that could show across the slope

@@ -131,6 +131,20 @@ func = "bootup_00CFA0"
 before_vram = 0x8100D328
 text = "    { void game_shadow_alpha(uint8_t*, recomp_context*); game_shadow_alpha(rdram, ctx); }"
 
+# Render mode lookups for a material's draw mode (cycle 1 and cycle 2), done
+# when a course loads; the result is in $v0. shadows.cpp gives the mode used
+# for the picture of the board under each rider (0x41C8, no depth test) a
+# depth test.
+[[patches.hook]]
+func = "bootup_06A814"
+before_vram = 0x8106AA6C
+text = "    { void game_board_mark_render_mode(uint8_t*, recomp_context*); game_board_mark_render_mode(rdram, ctx); }"
+
+[[patches.hook]]
+func = "bootup_06AA78"
+before_vram = 0x8106ABE0
+text = "    { void game_board_mark_render_mode(uint8_t*, recomp_context*); game_board_mark_render_mode(rdram, ctx); }"
+
 # The rider update has the course scale in $f6 here (shadows.cpp needs it to
 # measure the rider's height above the ground at draw time).
 [[patches.hook]]
