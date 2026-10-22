@@ -656,6 +656,11 @@ game::achievements::Snapshot game::achievements::snapshot() {
             const auto& bucket = list->buckets[b];
             for (uint32_t i = 0; i < bucket.num_achievements; i++) {
                 const rc_client_achievement_t* a = bucket.achievements[i];
+                // RetroAchievements adds a 0-point "Warning: Unknown Emulator" entry for programs
+                // it hasn't approved yet. It isn't part of the game's set, so leave it out.
+                if (a->id == 101000001 || (a->title != nullptr && strncmp(a->title, "Warning: Unknown Emulator", 25) == 0)) {
+                    continue;
+                }
                 Entry entry;
                 entry.id = a->id;
                 entry.title = a->title != nullptr ? a->title : "";

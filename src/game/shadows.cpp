@@ -12,6 +12,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <unordered_map>
 #include <variant>
 
 #include "recomp.h"
@@ -86,8 +87,20 @@ float height_above_ground(uint8_t* rdram, gpr rider) {
 // The shadow is fully dark up to fade_start above the ground and gone by fade_end.
 // The rider's position is about 15 above the snow while riding; big jumps reach
 // 120, and past a crest the ground under the rider can be 300 below.
-constexpr float fade_start = 28.0f;
-constexpr float fade_end = 80.0f;
+constexpr float fade_start = 22.0f;
+constexpr float fade_end = 50.0f;
+
+// The plane under the rider can switch between nearby and far-off ground from
+// one frame to the next (over a crest or a halfpipe wall), which made the
+// shadow flash on and off. Each rider's fade therefore moves toward its target
+// a step at a time: about a third of a second from fully dark to gone.
+constexpr float fade_step = 0.1f;
+struct RiderFade {
+    float value = 1.0f;
+    uint32_t last_call = 0;
+};
+std::unordered_map<uint32_t, RiderFade> rider_fades;
+uint32_t fade_calls = 0;
 
 // The shadow is flattened onto exactly the plane the game found under the
 // rider. Easing that plane's tilt (v0.1.11) made the shadow sink into the
@@ -123,6 +136,15 @@ extern "C" void game_shadow_alpha(uint8_t* rdram, recomp_context* ctx) {
         return;
     }
     float h = height_above_ground(rdram, ctx->r16);
-    float fade = std::clamp((fade_end - h) / (fade_end - fade_start), 0.0f, 1.0f);
-    ctx->f10.fl *= fade;
+    float target = std::clamp((fade_end - h) / (fade_end - fade_start), 0.0f, 1.0f);
+    fade_calls++;
+    RiderFade& fade = rider_fades[static_cast<uint32_t>(ctx->r16)];
+    if (fade.last_call == 0 || fade_calls - fade.last_call > 16) {
+        fade.value = target;   // new rider, or one that was not drawn for a while
+    }
+    else {
+        fade.value += std::clamp(target - fade.value, -fade_step, fade_step);
+    }
+    fade.last_call = fade_calls;
+    ctx->f10.fl *= fade.value;
 }

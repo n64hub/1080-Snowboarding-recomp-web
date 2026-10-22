@@ -242,6 +242,8 @@ void build_achievements_view() {
     top->set_justify_content(JustifyContent::SpaceBetween);
     add_heading(context, top, "RetroAchievements");
     Button* back = context.create_element<Button>(top, "Settings", ButtonStyle::Tertiary, ButtonSize::Small);
+    back->set_white_space(WhiteSpace::Nowrap);
+    back->set_flex_shrink(0.0f);
     back->add_pressed_callback([]() { show_achievements_view(false); });
 
     if (snap.state != SignInState::SignedIn) {
@@ -282,6 +284,8 @@ void build_achievements_view() {
     account->set_margin_bottom(8.0f);
     add_text(context, account, "Signed in as " + snap.username, theme::Typography::LabelMD, help_text_color);
     Button* sign_out = context.create_element<Button>(account, "Sign out", ButtonStyle::Tertiary, ButtonSize::Small);
+    sign_out->set_white_space(WhiteSpace::Nowrap);
+    sign_out->set_flex_shrink(0.0f);
     sign_out->add_pressed_callback([]() { game::achievements::sign_out(); });
 
     if (!snap.game_has_set) {
