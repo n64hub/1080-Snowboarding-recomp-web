@@ -151,3 +151,14 @@ text = "    { void game_board_mark_render_mode(uint8_t*, recomp_context*); game_
 func = "bootup_00C234"
 before_vram = 0x8100C3C8
 text = "    { void game_shadow_scale(uint8_t*, recomp_context*); game_shadow_scale(rdram, ctx); }"
+
+# RCP task manager (rcpMgrThread), on an SP task done message: when it asked the
+# running graphics task to yield, it reads the current graphics task to record
+# whether it yielded. The runtime always finishes graphics tasks rather than
+# yielding them, and in testing the message once arrived with no current task,
+# crashing on a null pointer as a demo race started. Treat that case as an
+# ordinary task done.
+[[patches.hook]]
+func = "bootup_061CF4"
+before_vram = 0x81061E70
+text = "    if (ctx->r20 != 0 && MEM_W(0xC, ctx->r16) == 0) { ctx->r20 = 0; }"

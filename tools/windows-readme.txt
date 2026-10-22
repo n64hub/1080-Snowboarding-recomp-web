@@ -17,6 +17,10 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.23: Fixes a crash that could happen as a race or demo loaded.
+The renderer sometimes wrote the last frame of the previous screen back into
+memory the game had already reused for the new course.
+
 Changes in v0.1.22: Under Rider: the faint picture of the board that the game
 draws on the snow under the rider no longer shows in front of a hill the rider
 has gone behind. It takes effect from the next course you load.

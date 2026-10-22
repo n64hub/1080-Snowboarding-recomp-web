@@ -132,6 +132,112 @@ index 00a72f6..3311543 100644
          bool areFramebufferPairsCompatible(const WorkloadQueue &workloadQueue, const GameIndices::FramebufferPair &first, const GameIndices::FramebufferPair &second);
          bool isSceneCompatible(const WorkloadQueue &workloadQueue, const GameScene &scene, const GameIndices::Projection &proj);
          void set(WorkloadQueue &workloadQueue, const uint32_t *workloadIndices, uint32_t indicesCount);
+diff --git a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
+index dccaa87..2aa5bbb 100644
+--- a/src/hle/rt64_interpreter.cpp
++++ b/src/hle/rt64_interpreter.cpp
+@@ -58,6 +58,7 @@ namespace RT64 {
+ 
+         // Check RDRAM if required.
+         state->checkRDRAM();
++        state->checkStaleWritebacks();
+ 
+         GBI *rdpGBI = state->rdp->gbi;
+         constexpr unsigned int opCodeMask = 0x3F;
+@@ -164,6 +165,7 @@ namespace RT64 {
+ 
+         // Check RDRAM if required.
+         state->checkRDRAM();
++        state->checkStaleWritebacks();
+ 
+         // Run the command interpreter.
+         DisplayList *dl = dlStart;
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+index 00ebbf0..694b642 100644
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -643,6 +643,29 @@ namespace RT64 {
+         rdramCheckPending = false;
+     }
+ 
++    void State::checkStaleWritebacks() {
++        // A display list can end without a full sync, leaving its framebuffers to be written back to
++        // RDRAM by the next one. If the CPU has meanwhile reused that memory (a game freeing its
++        // framebuffers to load a level, say), writing the old frame back would destroy the new data,
++        // which real hardware never does since the RDP writes as it draws. Skip those write-backs.
++        const Workload &workload = ext.workloadQueue->workloads[ext.workloadQueue->writeCursor];
++        for (uint32_t f = 0; f < workload.fbPairCount; f++) {
++            const FramebufferPair &fbPair = workload.fbPairs[f];
++            const uint32_t addresses[2] = { fbPair.colorImage.address, fbPair.depthImage.address };
++            for (uint32_t address : addresses) {
++                const Framebuffer *fb = framebufferManager.find(address);
++                if ((fb == nullptr) || (fb->RAMBytes == 0) || (staleWritebacks.count(address) > 0)) {
++                    continue;
++                }
++
++                if (XXH3_64bits(&RDRAM[address], fb->RAMBytes) != fb->RAMHash) {
++                    staleWritebacks.insert(address);
++                    fprintf(stderr, "[rt64] Framebuffer memory at 0x%08X was reused before its frame was written back; skipping the write-back.\n", address);
++                }
++            }
++        }
++    }
++
+     void State::fullSyncFramebufferPairTiles(Workload &workload, FramebufferPair &fbPair, uint32_t &loadOpCursor, uint32_t &rdpTileCursor) {
+         auto loadOperation = [&](uint32_t loadOpIndex) {
+             const auto &loadOp = workload.drawData.loadOperations[loadOpIndex];
+@@ -1478,9 +1501,11 @@ namespace RT64 {
+                 pairCursor = framebufferPairCursor;
+                 while (pairCursor < maxFramebufferPair) {
+                     if (getFramebufferPairs(pairCursor)) {
+-                        colorFb->copyNativeToRAM(&RDRAM[colorFb->addressStart], colorWriteWidth, colorRowStart, std::min(colorRowEnd, colorFb->height));
++                        if (staleWritebacks.count(colorFb->addressStart) == 0) {
++                            colorFb->copyNativeToRAM(&RDRAM[colorFb->addressStart], colorWriteWidth, colorRowStart, std::min(colorRowEnd, colorFb->height));
++                        }
+ 
+-                        if (depthWriteWidth > 0) {
++                        if ((depthWriteWidth > 0) && (staleWritebacks.count(depthFb->addressStart) == 0)) {
+                             depthFb->copyNativeToRAM(&RDRAM[depthFb->addressStart], depthWriteWidth, depthRowStart, std::min(depthRowEnd, depthFb->height));
+                         }
+                     }
+@@ -1613,6 +1638,8 @@ namespace RT64 {
+         }
+ #   endif
+ 
++        staleWritebacks.clear();
++
+         // Store the presentation rate in the workload.
+         if (extended.refreshRate != UINT16_MAX) {
+             workload.viOriginalRate = extended.refreshRate;
+diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
+index 4f10425..7b8804a 100644
+--- a/src/hle/rt64_state.h
++++ b/src/hle/rt64_state.h
+@@ -6,6 +6,8 @@
+ 
+ #include "xxHash/xxh3.h"
+ 
++#include <unordered_set>
++
+ #include "common/rt64_emulator_configuration.h"
+ #include "common/rt64_enhancement_configuration.h"
+ #include "gui/rt64_camera_controller.h"
+@@ -91,6 +93,7 @@ namespace RT64 {
+         std::vector<uint32_t> drawFbDiscards;
+         std::vector<DisplayList *> returnAddressStack;
+         std::vector<Framebuffer *> differentFbs;
++        std::unordered_set<uint32_t> staleWritebacks;
+         GameConfiguration gameConfig;
+         uint32_t displayListAddress;
+         uint64_t displayListCounter;
+@@ -159,6 +162,7 @@ namespace RT64 {
+         void submitFramebufferPair(FramebufferPair::FlushReason flushReason);
+         void checkRDRAM();
+         void fullSync();
++        void checkStaleWritebacks();
+         void fullSyncFramebufferPairTiles(Workload &workload, FramebufferPair &fbPair, uint32_t &loadOpCursor, uint32_t &rdpTileCursor);
+         void listProcessBegin();
+         void listProcessEnd();
 diff --git a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
 index a870166..c70fd18 100644
 --- a/src/hle/rt64_vi.cpp
