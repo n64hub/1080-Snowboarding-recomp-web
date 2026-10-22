@@ -17,6 +17,11 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.10: New Settings > Graphics > Rider Shadow option. Original
+casts the shadow along the sun like the N64, so with a low sun it can land far
+from the rider and jump across the slope in the air. Under Rider keeps it
+directly beneath the rider.
+
 Changes in v0.1.9: Fixed the rest of the background flickering in the fog. The
 renderer rebuilt the camera from parts and lost precision in the depth, so the
 fog on distant hills jumped from frame to frame. It now keeps the game's own

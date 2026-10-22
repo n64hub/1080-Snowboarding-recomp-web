@@ -130,6 +130,7 @@ set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/game/libultra_extras.cpp
     ${CMAKE_SOURCE_DIR}/src/game/boot_residue.cpp
     ${CMAKE_SOURCE_DIR}/src/game/draw_distance.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/shadows.cpp
 
     ${GAME_GENERATED_DIR}/rsp/aspMain.cpp
 )

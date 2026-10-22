@@ -17,6 +17,9 @@ namespace game {
 
     // Adds the Draw Distance option to the graphics tab (draw_distance.cpp).
     void add_draw_distance_option(recomp::config::Config& graphics);
+
+    // Adds the Rider Shadow option to the graphics tab (shadows.cpp).
+    void add_shadow_option(recomp::config::Config& graphics);
 }
 
 #endif

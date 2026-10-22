@@ -97,3 +97,10 @@ text = "    { float game_far_scale(void); ctx->f4.fl *= game_far_scale(); }"
 func = "bootup_0631C0"
 before_vram = 0x81063254
 text = "    { float game_cull_scale(void); ctx->f0.fl *= game_cull_scale(); }"
+
+# Rider shadow (src/game/shadows.cpp). The shadow direction has just been
+# normalized into $sp + 0x58 when the call returns.
+[[patches.hook]]
+func = "bootup_069370"
+before_vram = 0x81069464
+text = "    { void game_shadow_direction(uint8_t*, recomp_context*); game_shadow_direction(rdram, ctx); }"

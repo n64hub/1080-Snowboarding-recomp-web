@@ -47,7 +47,9 @@ void game::init_config() {
     general_options.has_mouse_sensitivity = false;
     recompui::config::create_general_tab(general_options);
 
-    game::add_draw_distance_option(recompui::config::create_graphics_tab());
+    recomp::config::Config& graphics_tab = recompui::config::create_graphics_tab();
+    game::add_draw_distance_option(graphics_tab);
+    game::add_shadow_option(graphics_tab);
 
     set_control_descriptions();
     recompui::config::create_controls_tab();
