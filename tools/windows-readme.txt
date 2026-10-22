@@ -17,6 +17,11 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.24: New Ice Reflection option (Graphics, default Solid). The
+upside-down rider on ice is drawn as one evenly see-through figure instead of
+patchy overlapping body parts, and fades out as the rider leaves the ice.
+Original keeps the N64 look.
+
 Changes in v0.1.23: Fixes a crash that could happen as a race or demo loaded.
 The renderer sometimes wrote the last frame of the previous screen back into
 memory the game had already reused for the new course.

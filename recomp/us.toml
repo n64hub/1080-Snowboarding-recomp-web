@@ -162,3 +162,17 @@ text = "    { void game_shadow_scale(uint8_t*, recomp_context*); game_shadow_sca
 func = "bootup_061CF4"
 before_vram = 0x81061E70
 text = "    if (ctx->r20 != 0 && MEM_W(0xC, ctx->r16) == 0) { ctx->r20 = 0; }"
+
+# Ice reflection (shadows.cpp): the game has just built the mirror matrix for
+# the rider's reflection, and has just put the reflection's draws in the
+# display list.
+[[patches.hook]]
+func = "bootup_00CFA0"
+before_vram = 0x8100D194
+text = "    { void game_reflection_matrix_built(uint8_t*, recomp_context*); game_reflection_matrix_built(rdram, ctx); }"
+
+[[patches.hook]]
+func = "bootup_00CFA0"
+before_vram = 0x8100D1C8
+text = "    { void game_reflection_drawn(uint8_t*, recomp_context*); game_reflection_drawn(rdram, ctx); }"
+

@@ -21,6 +21,9 @@ namespace game {
     // Adds the Rider Shadow option to the graphics tab (shadows.cpp).
     void add_shadow_option(recomp::config::Config& graphics);
 
+    // Adds the Ice Reflection option to the graphics tab (shadows.cpp).
+    void add_reflection_option(recomp::config::Config& graphics);
+
     // Adds the Field of View option to the graphics tab (camera.cpp).
     void add_fov_option(recomp::config::Config& graphics);
 }

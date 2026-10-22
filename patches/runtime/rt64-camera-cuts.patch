@@ -322,3 +322,143 @@ index cd8004d..d5e208f 100644
              Workload &workload = p.workloadQueue->workloads[w];
              const DrawData &drawData = workload.drawData;
              DrawBuffers &drawBuffers = workload.drawBuffers;
+diff --git a/include/rt64_extended_gbi.h b/include/rt64_extended_gbi.h
+index 6f3db15..1471661 100644
+--- a/include/rt64_extended_gbi.h
++++ b/include/rt64_extended_gbi.h
+@@ -81,7 +81,9 @@
+ #define G_EX_SETTEXCOORDWRAPPOINT_V1    0x000032
+ #define G_EX_SETRECTASPECT_V1           0x000033
+ #define G_EX_SETSCISSORASPECT_V1        0x000034
+-#define G_EX_MAX                        0x000035
++// Added for 1080 Snowboarding: Recompiled (see remapProjectionDepth in rt64_rsp.cpp).
++#define G_EX_REMAPPROJDEPTH_V1          0x000035
++#define G_EX_MAX                        0x000036
+ 
+ #define G_EX_ORIGIN_NONE            0x800
+ #define G_EX_ORIGIN_LEFT            0x0
+diff --git a/src/gbi/rt64_gbi_extended.cpp b/src/gbi/rt64_gbi_extended.cpp
+index af126e5..c59bf9f 100644
+--- a/src/gbi/rt64_gbi_extended.cpp
++++ b/src/gbi/rt64_gbi_extended.cpp
+@@ -307,6 +307,11 @@ namespace RT64 {
+             state->rsp->setNoN(!nearClipping);
+         }
+ 
++        void remapProjectionDepthV1(State *state, DisplayList **dl) {
++            *dl = *dl + 1;
++            state->rsp->remapProjectionDepth((*dl)->w1);
++        }
++
+         void matrixFloatV1(State *state, DisplayList **dl) {
+             uint8_t params = (*dl)->p1(0, 8) ^ state->rsp->pushMask;
+             *dl = *dl + 1;
+@@ -441,6 +446,7 @@ namespace RT64 {
+             Map[G_EX_SETVIEWMATRIXFLOAT_V1] = &setViewMatrixFloatV1;
+             Map[G_EX_SETNEARCLIPPING_V1] = &setNearClippingV1;
+             Map[G_EX_MATRIX_FLOAT_V1] = &matrixFloatV1;
++            Map[G_EX_REMAPPROJDEPTH_V1] = &remapProjectionDepthV1;
+             Map[G_EX_SETVERTEXSEGMENT_V1] = &setVertexSegmentV1;
+             Map[G_EX_SETTEXCOORDWRAPPOINT_V1] = &setTexcoordWrapPointV1;
+             Map[G_EX_SETRECTASPECT_V1] = &setRectAspectV1;
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index 1da2550..5b5842c 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -207,6 +207,84 @@ namespace RT64 {
+         matrixCommon(floatMatrix, address, params);
+     }
+ 
++    void RSP::remapProjectionDepth(uint32_t address) {
++        // Moves what is drawn next onto a thin layer in front of a world plane, in depth only: clip z
++        // becomes squeeze * z + (1 - squeeze) * (the plane's z at that point of the screen) - layer * w.
++        // Nothing moves on screen and depth order is kept. The parameters are six floats: the plane
++        // (n.x = d as nx, ny, nz, d), then layer and squeeze. The game uses it to draw a reflection that
++        // lies below the ice as if on it, with its own depth test.
++        const uint32_t rdramAddress = fromSegmentedMasked(address);
++        const float *params = reinterpret_cast<const float *>(state->fromRDRAM(rdramAddress));
++        const double plane[4] = { params[0], params[1], params[2], -double(params[3]) };
++        const double layer = params[4];
++        const double squeeze = params[5];
++
++        hlslpp::float4x4 &viewProjMatrix = viewProjMatrixStack[projectionMatrixStackSize - 1];
++        hlslpp::float4x4 &projMatrix = projMatrixStack[projectionMatrixStackSize - 1];
++        double vp[4][4];
++        for (int r = 0; r < 4; r++) {
++            for (int c = 0; c < 4; c++) {
++                vp[r][c] = viewProjMatrix[r][c];
++            }
++        }
++
++        // The plane in clip space: clip = world * vp, so world = clip * inverse(vp) and the plane is
++        // clip . q = 0 with q = inverse(vp) * plane. Solve vp * q = plane instead of inverting.
++        double a[4][5];
++        for (int r = 0; r < 4; r++) {
++            for (int c = 0; c < 4; c++) {
++                a[r][c] = vp[r][c];
++            }
++            a[r][4] = plane[r];
++        }
++        for (int col = 0; col < 4; col++) {
++            int pivot = col;
++            for (int r = col + 1; r < 4; r++) {
++                if (std::abs(a[r][col]) > std::abs(a[pivot][col])) {
++                    pivot = r;
++                }
++            }
++            if (std::abs(a[pivot][col]) < 1e-30) {
++                return;
++            }
++            for (int c = 0; c < 5; c++) {
++                std::swap(a[col][c], a[pivot][c]);
++            }
++            for (int r = 0; r < 4; r++) {
++                if (r != col) {
++                    const double f = a[r][col] / a[col][col];
++                    for (int c = col; c < 5; c++) {
++                        a[r][c] -= f * a[col][c];
++                    }
++                }
++            }
++        }
++        double q[4];
++        for (int i = 0; i < 4; i++) {
++            q[i] = a[i][4] / a[i][i];
++        }
++        if (std::abs(q[2]) < 1e-30) {
++            return;
++        }
++
++        // Column 2 of the remap: z' = sum(c[k] * column[k]).
++        double column[4] = { -(1.0 - squeeze) * q[0] / q[2], -(1.0 - squeeze) * q[1] / q[2], squeeze, -(1.0 - squeeze) * q[3] / q[2] - layer };
++        auto remap = [&](hlslpp::float4x4 &m) {
++            for (int r = 0; r < 4; r++) {
++                double z = 0.0;
++                for (int k = 0; k < 4; k++) {
++                    z += double(m[r][k]) * column[k];
++                }
++                m[r][2] = float(z);
++            }
++        };
++        remap(viewProjMatrix);
++        remap(projMatrix);
++        projectionMatrixChanged = true;
++        projectionMatrixInversed = false;
++        modelViewProjChanged = true;
++    }
++
+     void RSP::popMatrix(uint32_t count) {
+         while (count--) {
+             if (modelMatrixStackSize > 1) {
+diff --git a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
+index 61bb3b1..bf80c56 100644
+--- a/src/hle/rt64_rsp.h
++++ b/src/hle/rt64_rsp.h
+@@ -241,6 +241,7 @@ namespace RT64 {
+         void matrixCommon(const hlslpp::float4x4 &floatMatrix, uint32_t address, uint8_t params);
+         void matrix(uint32_t address, uint8_t params);
+         void matrixFloat(uint32_t address, uint8_t params);
++        void remapProjectionDepth(uint32_t address);
+         void popMatrix(uint32_t count);
+         void pushProjectionMatrix();
+         void popProjectionMatrix();

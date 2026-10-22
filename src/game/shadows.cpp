@@ -393,3 +393,240 @@ extern "C" void game_board_mark_render_mode(uint8_t* rdram, recomp_context* ctx)
     v = (v & ~zmode_mask) | z_cmp | zmode_decal;
     ctx->r2 = static_cast<int32_t>(v);
 }
+
+// Ice reflection setting.
+//
+// On ice the game replaces the shadow with an upside-down copy of the rider,
+// mirrored in the ground plane and drawn see-through over the ice as a decal.
+// Each body part is blended on its own, and the decal test against the ice
+// keeps only the parts that happen to lie close to the ice's depth, so the
+// copy looks patchy and faceted: overlapping parts stack up darker and parts
+// further below the ice drop out. "Solid" draws it as one figure:
+//  - its depth on screen is remapped to a thin layer just in front of the ice
+//    (nearest parts nearest), which moves nothing on screen;
+//  - a first pass writes only that depth, and the visible pass then draws just
+//    the nearest surfaces, so the copy blends over the ice once;
+//  - it fades out as the rider rises off the ice.
+namespace {
+enum class ReflectionMode : uint32_t {
+    Original = 0,
+    Solid = 1,
+};
+
+constexpr const char* reflection_option_id = "ice_reflection";
+
+ReflectionMode reflection_mode() {
+    auto& config = recompui::config::get_graphics_config();
+    if (config.has_option(reflection_option_id)) {
+        return static_cast<ReflectionMode>(std::get<uint32_t>(config.get_option_value(reflection_option_id)));
+    }
+    return ReflectionMode::Solid;
+}
+}
+
+namespace game {
+void add_reflection_option(recomp::config::Config& graphics) {
+    graphics.add_enum_option(
+        reflection_option_id,
+        "Ice Reflection",
+        "How the rider's reflection looks on ice. "
+        "<recomp-color primary>Original</recomp-color> blends each body part on its own like the N64, so it looks patchy. "
+        "<recomp-color primary>Solid</recomp-color> draws it as one evenly see-through figure that fades as the rider leaves the ice.",
+        {
+            { ReflectionMode::Original, "Original", "Original" },
+            { ReflectionMode::Solid, "Solid", "Solid" },
+        },
+        ReflectionMode::Solid);
+}
+}
+
+namespace {
+// Depth remap, in normalized device depth (z / w): the reflection is moved to
+// reflection_layer in front of the ice, its own depths squeezed by
+// reflection_squeeze. The visible pass sits reflection_pass_gap nearer than the
+// depth pass so it passes on the surfaces the depth pass kept.
+constexpr float reflection_layer = 2e-5f;
+constexpr float reflection_squeeze = 2e-3f;
+constexpr float reflection_pass_gap = 2e-7f;
+
+// The reflection fades between these heights of the rider above the ice
+// (see height_above_ground; about 15 while riding).
+constexpr float reflection_fade_start = 20.0f;
+constexpr float reflection_fade_end = 60.0f;
+std::unordered_map<uint32_t, RiderFade> reflection_fades;
+uint32_t reflection_fade_calls = 0;
+
+gpr reflection_counter = 0;
+uint32_t reflection_first_command = 0;
+float reflection_fade = 1.0f;
+float reflection_plane[4];   // unit normal and d of the mirror plane n.x = d
+
+// Display list commands.
+constexpr uint32_t op_mtx = 0x01;
+constexpr uint32_t op_dl = 0x06;
+constexpr uint32_t op_set_prim_color = 0xFA;
+constexpr uint32_t op_end_dl = 0xB8;
+constexpr uint32_t op_vertex = 0x04;
+constexpr uint32_t dl_branch = 0x06010000;
+// RT64 extended GBI (lib/rt64/include/rt64_extended_gbi.h): the hook is
+// G_SPNOOP with RT64's magic number, and the extended commands use opcode 0x64.
+constexpr uint32_t rt64_hook = 0x00525464;
+constexpr uint32_t rt64_enable = 0x10000064;
+constexpr uint32_t rt64_disable = 0x20000000;
+constexpr uint32_t ex_push_projection = 0x6400001D;
+constexpr uint32_t ex_pop_projection = 0x6400001E;
+constexpr uint32_t ex_remap_depth = 0x64000035;
+constexpr uint32_t max_reflection_commands = 256;
+
+}
+
+// Called right after the game builds the mirror matrix for the rider's
+// reflection ($s0 is the rider; the ground plane is at rider + 0x9D8).
+extern "C" void game_reflection_matrix_built(uint8_t* rdram, recomp_context* ctx) {
+    reflection_counter = 0;
+    if (reflection_mode() != ReflectionMode::Solid) {
+        return;
+    }
+    gpr rider = ctx->r16;
+    gpr plane = rider + rider_ground_plane;
+    float nx = load_float(rdram, plane), ny = load_float(rdram, plane + 4), nz = load_float(rdram, plane + 8), d = load_float(rdram, plane + 12);
+    float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+    if (len < 1e-6f) {
+        return;
+    }
+    reflection_plane[0] = nx / len;
+    reflection_plane[1] = ny / len;
+    reflection_plane[2] = nz / len;
+    reflection_plane[3] = d / len;
+
+    // Fade with the rider's height, eased like the shadow's.
+    float height = height_above_ground(rdram, rider);
+    float target = std::clamp((reflection_fade_end - height) / (reflection_fade_end - reflection_fade_start), 0.0f, 1.0f);
+    reflection_fade_calls++;
+    RiderFade& fade = reflection_fades[static_cast<uint32_t>(rider)];
+    if (fade.last_call == 0 || reflection_fade_calls - fade.last_call > 16) {
+        fade.value = target;
+    }
+    else {
+        fade.value += std::clamp(target - fade.value, -fade_step, fade_step);
+    }
+    fade.last_call = reflection_fade_calls;
+    reflection_fade = fade.value;
+
+    reflection_counter = display_list_counter(rdram);
+    reflection_first_command = reflection_counter ? MEM_W(4, reflection_counter) : 0;
+}
+
+// Called once the reflection's commands are in the display list: a prim color
+// with its alpha, the matrix (the whole world to screen transform), a material
+// display list and the body parts. Solid rewrites them as a depth pass followed
+// by the visible pass.
+extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
+    gpr counter = reflection_counter;
+    reflection_counter = 0;
+    if (counter == 0 || counter != display_list_counter(rdram)) {
+        return;
+    }
+    gpr commands = static_cast<int32_t>(MEM_W(0, counter));
+    uint32_t first = reflection_first_command;
+    uint32_t end = MEM_W(4, counter);
+    if (!is_rdram_pointer(commands) || end <= first + 2 || end - first > max_reflection_commands) {
+        return;
+    }
+    uint32_t count = end - first;
+    static uint32_t window[max_reflection_commands][2];
+    for (uint32_t i = 0; i < count; i++) {
+        window[i][0] = MEM_W(0, commands + (first + i) * 8);
+        window[i][1] = MEM_W(4, commands + (first + i) * 8);
+    }
+    if ((window[0][0] >> 24) != op_set_prim_color || (window[1][0] >> 24) != op_mtx) {
+        return;
+    }
+
+    // The material is the first display list that sets a render mode.
+    uint32_t material = count;
+    uint32_t material_mode = 0;
+    for (uint32_t i = 2; i < count && material == count; i++) {
+        if ((window[i][0] >> 24) != op_dl) {
+            continue;
+        }
+        gpr sub = static_cast<int32_t>(0x80000000u | (window[i][1] & 0x00FFFFFF));
+        for (uint32_t j = 0; j < 12; j++) {
+            uint32_t w0 = MEM_W(0, sub + j * 8);
+            if ((w0 >> 24) == op_end_dl || (w0 >> 24) == op_vertex) {
+                break;
+            }
+            if (w0 == set_render_mode) {
+                material = i;
+                material_mode = MEM_W(4, sub + j * 8);
+                break;
+            }
+        }
+    }
+    if (material == count) {
+        return;
+    }
+
+    uint32_t out = first;
+    auto put = [&](uint32_t w0, uint32_t w1) {
+        MEM_W(0, commands + out * 8) = w0;
+        MEM_W(4, commands + out * 8) = w1;
+        out++;
+    };
+    auto physical = [&](uint32_t index) {
+        return static_cast<uint32_t>(commands + index * 8) & 0x00FFFFFFu;
+    };
+    auto put_float = [&](uint32_t index, int word, float value) {
+        union { float f; uint32_t u; } bits;
+        bits.f = value;
+        MEM_W(word * 4, commands + index * 8) = bits.u;
+    };
+
+    // RT64's extended commands: the depth remap is done by the renderer on its
+    // own copy of the projection (the game's fixed point matrices are far too
+    // coarse for it at the course's coordinates).
+    put(rt64_hook, rt64_enable);
+    put(dl_branch, physical(out + 1 + 6));
+    uint32_t params = out;
+    for (int pass = 0; pass < 2; pass++) {
+        uint32_t block = params + pass * 3;
+        for (int i = 0; i < 4; i++) {
+            put_float(block, i, reflection_plane[i]);
+        }
+        put_float(block, 4, reflection_layer + (pass == 1 ? reflection_pass_gap : 0.0f));
+        put_float(block, 5, reflection_squeeze);
+    }
+    out += 6;
+
+    // Depth pass: alpha 0, depth tested and written.
+    const uint32_t depth_mode = (material_mode & ~zmode_mask) | z_cmp | z_upd;
+    const uint32_t visible_mode = (material_mode & ~zmode_mask) | zmode_xlu | z_cmp;
+    put(ex_push_projection, 0);
+    put(ex_remap_depth, 0);
+    put(0, physical(params));
+    put(window[0][0], window[0][1] & 0xFFFFFF00u);
+    for (uint32_t i = 1; i < count; i++) {
+        put(window[i][0], window[i][1]);
+        if (i == material) {
+            put(set_render_mode, depth_mode);
+        }
+    }
+    put(ex_pop_projection, 0);
+
+    // Visible pass: a hair nearer, the alpha faded, drawn where it is in front
+    // of (or at) what the depth pass kept.
+    put(ex_push_projection, 0);
+    put(ex_remap_depth, 0);
+    put(0, physical(params + 3));
+    uint32_t alpha = static_cast<uint32_t>(std::lround((window[0][1] & 0xFF) * reflection_fade));
+    put(window[0][0], (window[0][1] & 0xFFFFFF00u) | alpha);
+    for (uint32_t i = 1; i < count; i++) {
+        put(window[i][0], window[i][1]);
+        if (i == material) {
+            put(set_render_mode, visible_mode);
+        }
+    }
+    put(ex_pop_projection, 0);
+    put(rt64_hook, rt64_disable);
+    MEM_W(4, counter) = out;
+}
