@@ -148,3 +148,26 @@ index cd8004d..d5e208f 100644
              Workload &workload = p.workloadQueue->workloads[w];
              const DrawData &drawData = workload.drawData;
              DrawBuffers &drawBuffers = workload.drawBuffers;
+diff --git a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
+index a870166..c6cf12c 100644
+--- a/src/hle/rt64_vi.cpp
++++ b/src/hle/rt64_vi.cpp
+@@ -167,7 +167,17 @@ namespace RT64 {
+             return FullRate / factors[0];
+         }
+         else {
+-            return 0;
++            // The game took a varying number of VIs per frame (2 then 3, say). Use the average rate
++            // instead of giving up on frame interpolation for those scenes altogether.
++            uint32_t sum = 0;
++            for (uint32_t factor : factors) {
++                if (factor == 0) {
++                    return 0;
++                }
++                sum += factor;
++            }
++            const uint32_t FullRate = 60;
++            return (FullRate * uint32_t(factors.size()) + sum / 2) / sum;
+         }
+     }
+ 

@@ -87,6 +87,20 @@ void game::init_config() {
             }
             std::ofstream{ dd_marker };
         }
+
+        // Resolution defaults to Auto (it follows the window size). Move
+        // existing installs to Auto once; a choice made after this is kept.
+        std::filesystem::path res_marker = app_dir / "resolution_default_v2";
+        if (!std::filesystem::exists(res_marker)) {
+            namespace gfx = recompui::config::graphics::options;
+            auto& graphics = recompui::config::get_graphics_config();
+            const uint32_t automatic = static_cast<uint32_t>(ultramodern::renderer::Resolution::Auto);
+            if (std::get<uint32_t>(graphics.get_option_value(gfx::res_option)) != automatic) {
+                graphics.set_option_value(gfx::res_option, automatic);
+                graphics.save_config();
+            }
+            std::ofstream{ res_marker };
+        }
     }
 }
 

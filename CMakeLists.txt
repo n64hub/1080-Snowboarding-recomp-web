@@ -133,6 +133,7 @@ set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/game/draw_distance.cpp
     ${CMAKE_SOURCE_DIR}/src/game/shadows.cpp
     ${CMAKE_SOURCE_DIR}/src/game/camera.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/achievements.cpp
 
     ${GAME_GENERATED_DIR}/rsp/aspMain.cpp
 )
@@ -337,7 +338,30 @@ target_include_directories(recompinput BEFORE PRIVATE
     ${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime/thirdparty
 )
 
+# RetroAchievements client library (MIT).
+file(GLOB RCHEEVOS_SOURCES
+    ${CMAKE_SOURCE_DIR}/lib/rcheevos/src/rapi/*.c
+    ${CMAKE_SOURCE_DIR}/lib/rcheevos/src/rcheevos/*.c
+)
+add_library(rcheevos STATIC
+    ${RCHEEVOS_SOURCES}
+    ${CMAKE_SOURCE_DIR}/lib/rcheevos/src/rc_client.c
+    ${CMAKE_SOURCE_DIR}/lib/rcheevos/src/rc_compat.c
+    ${CMAKE_SOURCE_DIR}/lib/rcheevos/src/rc_util.c
+    ${CMAKE_SOURCE_DIR}/lib/rcheevos/src/rc_version.c
+    ${CMAKE_SOURCE_DIR}/lib/rcheevos/src/rhash/md5.c
+)
+target_include_directories(rcheevos PUBLIC
+    ${CMAKE_SOURCE_DIR}/lib/rcheevos/include
+    ${CMAKE_SOURCE_DIR}/lib/rcheevos/src
+)
+target_compile_definitions(rcheevos PUBLIC RC_DISABLE_LUA)
+if (WIN32)
+    target_link_libraries(1080SnowboardingRecompiled PRIVATE winhttp)
+endif()
+
 target_link_libraries(1080SnowboardingRecompiled PRIVATE
+    rcheevos
     RecompiledFuncs
     recompui
     recompinput

@@ -14,6 +14,8 @@
 #include <cstdio>
 #include <initializer_list>
 
+#include "game_achievements.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -31,6 +33,7 @@ void put_word(uint8_t* base, uint32_t offset, uint32_t value) {
 }
 
 extern "C" void game_boot_residue(uint8_t* rdram) {
+    game::achievements::set_rdram(rdram);
     uint8_t* kseg1_page = rdram + kseg1_offset;
 #ifdef _WIN32
     DWORD old_protect;

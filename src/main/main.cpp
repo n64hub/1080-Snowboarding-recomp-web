@@ -46,6 +46,7 @@
 #include "game_version.h"
 #include "theme.h"
 #include "launcher.h"
+#include "game_achievements.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -653,18 +654,20 @@ int main(int argc, char** argv) {
     game::init_config();
     game::register_launcher();
 
-    // Development aid: start the game as soon as the launcher opens, so test
-    // runs need no clicks. Requires a ROM that was already selected once.
-    if (std::getenv("GAME_AUTOSTART") != nullptr) {
-        recompui::register_launcher_update_callback([](recompui::LauncherMenu*) {
-            static bool started = false;
-            if (!started && recomp::is_rom_valid(supported_games[0].game_id)) {
-                started = true;
-                recompui::hide_all_contexts();
-                recomp::start_game(supported_games[0].game_id, {});
-            }
-        });
-    }
+    game::achievements::init();
+
+    // GAME_AUTOSTART is a development aid: start the game as soon as the
+    // launcher opens, so test runs need no clicks. Requires a ROM that was
+    // already selected once.
+    recompui::register_launcher_update_callback([](recompui::LauncherMenu* menu) {
+        game::launcher_update(menu);
+        static bool started = false;
+        if (!started && std::getenv("GAME_AUTOSTART") != nullptr && recomp::is_rom_valid(supported_games[0].game_id)) {
+            started = true;
+            recompui::hide_all_contexts();
+            recomp::start_game(supported_games[0].game_id, {});
+        }
+    });
 
     recomp::rsp::callbacks_t rsp_callbacks{
         .get_rsp_microcode = get_rsp_microcode,
@@ -698,7 +701,10 @@ int main(int argc, char** argv) {
     };
 
     ultramodern::events::callbacks_t thread_callbacks{
-        .vi_callback = recompinput::update_rumble,
+        .vi_callback = []() {
+            recompinput::update_rumble();
+            game::achievements::frame();
+        },
         .gfx_init_callback = nullptr,
     };
 

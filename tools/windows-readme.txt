@@ -17,6 +17,16 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.14: RetroAchievements. Pick Achievements in the launcher and
+sign in with your RetroAchievements account to see this game's set and earn
+achievements as you ride, with a pop-up for each unlock. Only a sign-in token
+is saved (achievements_login.json), never your password. Unlocks are kept on
+this PC (achievements_local.json) and are not sent to RetroAchievements until
+it approves this program. Also: Resolution is set to Auto once for existing
+installs, the Under Rider shadow no longer slides into place or sinks into the
+snow, and character select and other screens whose frame pacing varies now
+get the smooth in-between frames too.
+
 Changes in v0.1.13: New launcher: a snowy title screen with the menu on the
 left and the main settings (window, aspect, resolution, frame rate 30/60/120,
 draw distance, field of view, rider shadow) on the right. Changes save

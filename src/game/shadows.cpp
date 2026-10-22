@@ -5,15 +5,13 @@
 // (bootup_069370 builds the matrix). With a low sun the shadow lands far from
 // the rider, and in the air it slides across the slope with the rider's height.
 // "Under Rider" flattens along the vertical instead, so the shadow stays
-// directly beneath the rider, eases the tilt of the ground plane, and fades the
-// shadow out with height (otherwise it lands on whatever is far below, even
+// directly beneath the rider, and fades the shadow out with height (otherwise it lands on whatever is far below, even
 // past a crest). recomp/us.toml has the hooks.
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
-#include <unordered_map>
 #include <variant>
 
 #include "recomp.h"
@@ -91,19 +89,9 @@ float height_above_ground(uint8_t* rdram, gpr rider) {
 constexpr float fade_start = 28.0f;
 constexpr float fade_end = 80.0f;
 
-// The ray under the rider often lands on a different triangle from one frame to
-// the next, which tilts the flattened shadow back and forth. Each rider keeps a
-// smoothed plane normal; the plane still goes through the ground point straight
-// under the rider, so the shadow stays put and only its tilt is eased.
-struct SmoothedPlane {
-    float nx, ny, nz;
-    uint32_t last_seen;
-};
-std::unordered_map<uint32_t, SmoothedPlane> smoothed_planes;
-uint32_t shadow_calls = 0;
-constexpr float smoothing = 0.35f;     // share of the new normal taken each frame
-constexpr float snap_cos = 0.9f;       // snap to the new normal past about 25 degrees
-constexpr uint32_t stale_calls = 16;   // snap if the rider had no shadow for a while
+// The shadow is flattened onto exactly the plane the game found under the
+// rider. Easing that plane's tilt (v0.1.11) made the shadow sink into the
+// snow in places and slide into place over a few frames, so it is not done.
 }
 
 // Called with the normalized shadow direction (x, y, z floats) at $sp + 0x58.
@@ -120,43 +108,6 @@ extern "C" void game_shadow_direction(uint8_t* rdram, recomp_context* ctx) {
     store_float(rdram, dir + 0x0, 0.0f);
     store_float(rdram, dir + 0x4, std::signbit(y) ? -1.0f : 1.0f);
     store_float(rdram, dir + 0x8, 0.0f);
-
-    gpr plane = (gpr)(int32_t)MEM_W(0x74, sp);
-    gpr rider = plane - rider_ground_plane;
-    float nx = load_float(rdram, plane), ny = load_float(rdram, plane + 4), nz = load_float(rdram, plane + 8), d = load_float(rdram, plane + 12);
-    if (std::fabs(ny) < 1e-3f) {
-        return;
-    }
-
-    shadow_calls++;
-    SmoothedPlane& s = smoothed_planes[static_cast<uint32_t>(rider)];
-    float dot = s.nx * nx + s.ny * ny + s.nz * nz;
-    if ((s.last_seen == 0) || (shadow_calls - s.last_seen > stale_calls) || (dot < snap_cos)) {
-        s.nx = nx; s.ny = ny; s.nz = nz;
-    }
-    else {
-        s.nx += (nx - s.nx) * smoothing;
-        s.ny += (ny - s.ny) * smoothing;
-        s.nz += (nz - s.nz) * smoothing;
-        float len = std::sqrt(s.nx * s.nx + s.ny * s.ny + s.nz * s.nz);
-        s.nx /= len; s.ny /= len; s.nz /= len;
-    }
-    s.last_seen = shadow_calls;
-
-    // Ground point straight under the rider, on the game's plane.
-    float k = -world_scale.load(std::memory_order_relaxed);
-    float gx = k * load_float(rdram, rider + rider_pos);
-    float gz = k * load_float(rdram, rider + rider_pos + 8);
-    float gy = -(nx * gx + nz * gz + d) / ny;
-
-    // Hand the smoothed plane to the matrix builder through unused stack space
-    // in this function's frame, leaving the rider's own copy untouched.
-    gpr smoothed = sp + 0x20;
-    store_float(rdram, smoothed + 0x0, s.nx);
-    store_float(rdram, smoothed + 0x4, s.ny);
-    store_float(rdram, smoothed + 0x8, s.nz);
-    store_float(rdram, smoothed + 0xC, -(s.nx * gx + s.ny * gy + s.nz * gz));
-    MEM_W(0x74, sp) = (int32_t)smoothed;
 }
 
 // Called with the course scale in $f6 while a rider checks how high it is above
