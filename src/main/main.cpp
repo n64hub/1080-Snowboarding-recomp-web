@@ -45,6 +45,7 @@
 
 #include "game_version.h"
 #include "theme.h"
+#include "launcher.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -650,6 +651,7 @@ int main(int argc, char** argv) {
 
     game::register_overlays();
     game::init_config();
+    game::register_launcher();
 
     // Development aid: start the game as soon as the launcher opens, so test
     // runs need no clicks. Requires a ROM that was already selected once.

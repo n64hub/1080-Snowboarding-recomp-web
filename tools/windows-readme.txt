@@ -17,6 +17,11 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.13: New launcher: a snowy title screen with the menu on the
+left and the main settings (window, aspect, resolution, frame rate 30/60/120,
+draw distance, field of view, rider shadow) on the right. Changes save
+straight away and are the same settings as in Settings > Graphics.
+
 Changes in v0.1.12: New Settings > Graphics > Field of View slider (100% to
 150%) to see more of the course around the rider. 100% matches the N64.
 

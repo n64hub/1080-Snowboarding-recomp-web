@@ -8,3 +8,4 @@ baserom*
 build/
 recomp/us_try.toml
 __pycache__/
+assets/launcher/logo.png

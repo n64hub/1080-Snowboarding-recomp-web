@@ -6,6 +6,7 @@
 # Needs: llvm-mingw (https://github.com/mstorsjo/llvm-mingw) in $LLVM_MINGW,
 # DirectX-Headers (https://github.com/microsoft/DirectX-Headers) in
 # $DIRECTX_HEADERS, wine64 (runs build-time tools), cmake and ninja.
+# Optional: LAUNCHER_LOGO=path/to/logo.png to show the logo in the launcher.
 # Output: build/win/package/1080SnowboardingRecompiled (zip it to share).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -34,6 +35,10 @@ mkdir -p "$PKG"
 cd "$ROOT/build/win"
 cp 1080SnowboardingRecompiled.exe SDL2.dll dxcompiler.dll dxil.dll recompcontrollerdb.txt "$PKG/"
 cp -r assets "$PKG/"
+# The launcher shows the 1080 logo if it is packaged; it is not in the repository.
+if [ -n "${LAUNCHER_LOGO:-}" ] && [ -f "$LAUNCHER_LOGO" ]; then
+    cp "$LAUNCHER_LOGO" "$PKG/assets/launcher/logo.png"
+fi
 VERSION=$(sed -n 's/^GAME_VERSION:STRING=//p' CMakeCache.txt)
 sed "1s/(early)/(v$VERSION, early)/" "$ROOT/tools/windows-readme.txt" > "$PKG/README.txt"
 "$LLVM_MINGW/bin/llvm-strip" "$PKG/1080SnowboardingRecompiled.exe"

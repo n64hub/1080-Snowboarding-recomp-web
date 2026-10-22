@@ -1,0 +1,16 @@
+#ifndef GAME_LAUNCHER_H
+#define GAME_LAUNCHER_H
+
+#include <vector>
+
+#include "librecomp/game.hpp"
+
+// The game list from main.cpp.
+extern std::vector<recomp::GameEntry> supported_games;
+
+namespace game {
+    // Replaces the frontend's plain launcher with the 1080 one (launcher.cpp).
+    void register_launcher();
+}
+
+#endif

@@ -124,6 +124,7 @@ set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/main/main.cpp
     ${CMAKE_SOURCE_DIR}/src/main/crash_log.cpp
     ${CMAKE_SOURCE_DIR}/src/main/theme.cpp
+    ${CMAKE_SOURCE_DIR}/src/main/launcher.cpp
     ${CMAKE_SOURCE_DIR}/src/main/register_overlays.cpp
 
     ${CMAKE_SOURCE_DIR}/src/game/config.cpp
