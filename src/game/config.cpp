@@ -73,6 +73,17 @@ void game::init_config() {
             }
             std::ofstream{ marker };
         }
+
+        // v0.1.6 saved Draw Distance = Extended as its default; v0.1.7 defaults to Maximum.
+        std::filesystem::path dd_marker = app_dir / "draw_distance_default_v2";
+        if (!std::filesystem::exists(dd_marker)) {
+            auto& graphics = recompui::config::get_graphics_config();
+            if (graphics.has_option("draw_distance") && std::get<uint32_t>(graphics.get_option_value("draw_distance")) == 1) {
+                graphics.set_option_value("draw_distance", uint32_t{ 2 });
+                graphics.save_config();
+            }
+            std::ofstream{ dd_marker };
+        }
     }
 }
 

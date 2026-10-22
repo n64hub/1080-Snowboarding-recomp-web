@@ -17,6 +17,10 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.7: Draw Distance defaults to Maximum (the whole course is drawn,
+so nothing builds in the distance and the far edge no longer flickers through
+the fog). Extended now reaches further too. If v0.1.6 saved Extended, it moves
+to Maximum once.
 Changes in v0.1.6: fixed the crash (black screen) when a race loads: the
 renderer could write a late frame over memory the game had just reused.
 60 fps is the default again (Settings > Graphics > Framerate,

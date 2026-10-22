@@ -29,7 +29,7 @@ enum class DrawDistance : uint32_t {
 constexpr const char* option_id = "draw_distance";
 constexpr int32_t last_row = 127;  // the grid has 128 rows
 
-std::atomic<uint32_t> current_level{ static_cast<uint32_t>(DrawDistance::Extended) };
+std::atomic<uint32_t> current_level{ static_cast<uint32_t>(DrawDistance::Maximum) };
 
 DrawDistance level() {
     return static_cast<DrawDistance>(current_level.load(std::memory_order_relaxed));
@@ -51,13 +51,13 @@ void add_draw_distance_option(recomp::config::Config& graphics) {
         "How far ahead the course, trees and other riders are drawn. "
         "<recomp-color primary>Original</recomp-color> matches the N64. "
         "<recomp-color primary>Extended</recomp-color> draws about three times as far and pushes the fog back to match. "
-        "<recomp-color primary>Maximum</recomp-color> draws the whole course with almost no fog.",
+        "<recomp-color primary>Maximum</recomp-color> (the default) draws the whole course at once, so nothing builds in the distance, with almost no fog.",
         {
             { DrawDistance::Original, "Original" },
             { DrawDistance::Extended, "Extended" },
             { DrawDistance::Maximum, "Maximum" },
         },
-        DrawDistance::Extended);
+        DrawDistance::Maximum);
 }
 }
 
@@ -75,8 +75,8 @@ extern "C" void game_draw_rows(uint8_t* rdram, recomp_context* ctx) {
         case DrawDistance::Original:
             return;
         case DrawDistance::Extended: {
-            // The default window reaches 20 rows ahead; add 40 more on each side.
-            constexpr int32_t extra_rows = 40;
+            // The default window reaches 20 rows ahead; add 60 more on each side so the edge stays inside the fog.
+            constexpr int32_t extra_rows = 60;
             first = std::max(first - extra_rows, 0);
             last = std::min(last + extra_rows, last_row);
             break;
