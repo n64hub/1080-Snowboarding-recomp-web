@@ -17,6 +17,11 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.19: The Under Rider shadow no longer loses pieces (which
+looked like flicker) on bumpy snow; it now sits a little higher above the snow.
+The board's part of the shadow, which still showed faintly through hills, is
+now hidden by them too.
+
 Changes in v0.1.18: With Under Rider shadows, hills and banks in front of the
 rider now hide the shadow instead of it showing through them. (v0.1.17 meant to
 do this but changed a different draw, so it had no effect on the rider's

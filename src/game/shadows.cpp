@@ -109,7 +109,9 @@ uint32_t fade_calls = 0;
 // While the game builds the shadow matrix, the ground plane under the rider is
 // raised a little toward the rider so the depth test (game_shadow_draw_end)
 // doesn't lose the shadow in the snow it lies on, then put back.
-constexpr float shadow_lift = 0.5f;
+// 0.5 still let bumps in the snow next to the triangle under the rider cut
+// pieces out of the shadow; 2 (the rider's middle is about 15 up) does not.
+constexpr float shadow_lift = 2.0f;
 gpr lifted_plane = 0;
 uint32_t lifted_plane_d = 0;
 
@@ -215,13 +217,16 @@ gpr display_list_counter(uint8_t* rdram) {
 gpr shadow_counter = 0;
 uint32_t shadow_first_command = 0;
 
-// The shadow's material display list sets this render mode: blended, no depth
-// test, so the shadow showed through hills in front of the rider.
+// The shadow's material display lists set blended render modes with no depth
+// test, so the shadow showed through hills in front of the rider. Under Rider
+// adds a depth test; the original modes are remembered so Original gets them back.
 constexpr uint32_t set_render_mode = 0xB900031D;   // G_SETOTHERMODE_L, shift 3, 29 bits
-constexpr uint32_t shadow_render_mode = 0x00442048;
 constexpr uint32_t z_cmp = 0x10;
+constexpr uint32_t z_upd = 0x20;
+constexpr uint32_t zmode_mask = 0xC00;
 constexpr uint32_t zmode_xlu = 0x800;
-constexpr uint32_t depth_tested_render_mode = shadow_render_mode | z_cmp | zmode_xlu;
+constexpr uint32_t depth_test_bits = z_cmp | zmode_xlu;
+std::unordered_map<uint32_t, uint32_t> original_render_modes;   // command address -> mode
 }
 
 // Called just before the rider's shadow is set up and drawn.
@@ -231,9 +236,9 @@ extern "C" void game_shadow_draw_begin(uint8_t* rdram, recomp_context* ctx) {
 }
 
 // Called once the shadow's commands are in the display list. The shadow is the
-// rider's model flattened onto the ground, drawn through a small material
-// display list of its own; Under Rider switches that material's render mode to
-// a depth-tested one (and back for Original). The material is only read when
+// rider's model flattened onto the ground, drawn through small material display
+// lists of its own (one plain, one textured for the board); Under Rider switches
+// their render modes to depth-tested ones (and back for Original). The material is only read when
 // the frame is drawn, so changing it here takes effect this frame.
 extern "C" void game_shadow_draw_end(uint8_t* rdram, recomp_context* ctx) {
     gpr counter = shadow_counter;
@@ -246,24 +251,34 @@ extern "C" void game_shadow_draw_end(uint8_t* rdram, recomp_context* ctx) {
     if (!is_rdram_pointer(commands) || end < shadow_first_command || end - shadow_first_command > 64) {
         return;
     }
-    uint32_t wanted = (mode() == ShadowMode::UnderRider) ? depth_tested_render_mode : shadow_render_mode;
+    bool depth_test = (mode() == ShadowMode::UnderRider);
     for (uint32_t i = shadow_first_command; i < end; i++) {
         gpr command = commands + i * 8;
-        if ((MEM_W(0, command) >> 24) != 0x06) {   // G_DL
+        uint32_t op = MEM_W(0, command) >> 24;
+        if (op != 0x06) {   // G_DL
             continue;
         }
         gpr sub = static_cast<int32_t>(0x80000000u | (MEM_W(4, command) & 0x00FFFFFF));
-        for (uint32_t j = 0; j < 8; j++) {
+        for (uint32_t j = 0; j < 12; j++) {
             gpr sub_command = sub + j * 8;
             uint32_t w0 = MEM_W(0, sub_command);
-            if ((w0 >> 24) == 0xB8) {   // G_ENDDL
+            if ((w0 >> 24) == 0xB8 || (w0 >> 24) == 0x04) {   // G_ENDDL, or vertices (geometry, not a material)
                 break;
             }
-            uint32_t w1 = MEM_W(4, sub_command);
-            if (w0 == set_render_mode && (w1 == shadow_render_mode || w1 == depth_tested_render_mode)) {
-                MEM_W(4, sub_command) = wanted;
-                break;
+            if (w0 != set_render_mode) {
+                continue;
             }
+            uint32_t address = static_cast<uint32_t>(sub_command);
+            uint32_t current = MEM_W(4, sub_command);
+            auto it = original_render_modes.find(address);
+            if (it == original_render_modes.end() || (current != it->second && current != (it->second | depth_test_bits))) {
+                if ((current & (z_cmp | z_upd | zmode_mask)) != 0) {
+                    break;   // already depth tested: not one of the shadow's materials
+                }
+                it = original_render_modes.insert_or_assign(address, current).first;
+            }
+            MEM_W(4, sub_command) = depth_test ? (it->second | depth_test_bits) : it->second;
+            break;
         }
     }
 }
