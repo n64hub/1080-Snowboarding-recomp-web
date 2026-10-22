@@ -17,6 +17,11 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.21: Under Rider flattens the shadow straight onto the snow under
+the rider instead of straight down. On steep walls and banks the old way
+stretched the shadow into long thin slivers that could show across the slope
+and over hills.
+
 Changes in v0.1.20: The rider's shadow no longer judders at 60 and 120 fps. The
 frame smoothing kept losing track of it, so on in-between frames it jumped back
 to the last real frame while the rider moved on (this affected both shadow

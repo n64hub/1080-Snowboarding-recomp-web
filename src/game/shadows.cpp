@@ -4,8 +4,8 @@
 // ground plane under them, along the direction of the course's sun
 // (bootup_069370 builds the matrix). With a low sun the shadow lands far from
 // the rider, and in the air it slides across the slope with the rider's height.
-// "Under Rider" flattens along the vertical instead, so the shadow stays
-// directly beneath the rider, and fades the shadow out with height (otherwise it lands on whatever is far below, even
+// "Under Rider" flattens straight onto the ground instead (along its normal), so
+// the shadow stays directly beneath the rider, and fades the shadow out with height (otherwise it lands on whatever is far below, even
 // past a crest). recomp/us.toml has the hooks.
 
 #include <algorithm>
@@ -129,27 +129,35 @@ void restore_lifted_plane(uint8_t* rdram) {
 extern "C" void game_shadow_direction(uint8_t* rdram, recomp_context* ctx) {
     restore_lifted_plane(rdram);
     gpr sp = ctx->r29;
-    if (mode() == ShadowMode::UnderRider) {
-        gpr dir = sp + 0x58;
-        // Keep the sign of the vertical part: flipping the direction would flip the
-        // sign of w in the shadow matrix and clip the shadow away.
-        float y = load_float(rdram, dir + 0x4);
-        store_float(rdram, dir + 0x0, 0.0f);
-        store_float(rdram, dir + 0x4, std::signbit(y) ? -1.0f : 1.0f);
-        store_float(rdram, dir + 0x8, 0.0f);
-    }
     if (mode() != ShadowMode::UnderRider) {
         return;
     }
 
-    // Raise the plane toward the rider. The plane is in the rider's
-    // coordinates times the course scale, like in height_above_ground.
     gpr plane = static_cast<int32_t>(MEM_W(0x74, sp));
-    gpr rider = plane - rider_ground_plane;   // the caller passes rider + 0x9D8
-    float k = -world_scale.load(std::memory_order_relaxed);
     float nx = load_float(rdram, plane), ny = load_float(rdram, plane + 4), nz = load_float(rdram, plane + 8), d = load_float(rdram, plane + 12);
     float len = std::sqrt(nx * nx + ny * ny + nz * nz);
-    if (k == 0.0f || len < 1e-6f) {
+    if (len < 1e-6f) {
+        return;
+    }
+
+    // Flatten straight onto the ground plane, along its normal. Flattening along
+    // the vertical (v0.1.10 to v0.1.20) stretched the shadow into long slivers on
+    // steep walls and banks. The sign follows the game's own direction: flipping
+    // it would flip the sign of w in the shadow matrix and clip the shadow away.
+    gpr dir = sp + 0x58;
+    float dx = load_float(rdram, dir), dy = load_float(rdram, dir + 0x4), dz = load_float(rdram, dir + 0x8);
+    // (Taken from the vertical part, which is steady from frame to frame, unless the plane is close to a wall.)
+    float facing = (std::fabs(ny) > 0.2f * len) ? ny * dy : nx * dx + ny * dy + nz * dz;
+    float sign = facing < 0.0f ? -1.0f : 1.0f;
+    store_float(rdram, dir + 0x0, sign * nx / len);
+    store_float(rdram, dir + 0x4, sign * ny / len);
+    store_float(rdram, dir + 0x8, sign * nz / len);
+
+    // Raise the plane toward the rider. The plane is in the rider's
+    // coordinates times the course scale, like in height_above_ground.
+    gpr rider = plane - rider_ground_plane;   // the caller passes rider + 0x9D8
+    float k = -world_scale.load(std::memory_order_relaxed);
+    if (k == 0.0f) {
         return;
     }
     float px = load_float(rdram, rider + rider_pos), py = load_float(rdram, rider + rider_pos + 4), pz = load_float(rdram, rider + rider_pos + 8);
