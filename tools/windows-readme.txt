@@ -17,6 +17,11 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.9: Fixed the rest of the background flickering in the fog. The
+renderer rebuilt the camera from parts and lost precision in the depth, so the
+fog on distant hills jumped from frame to frame. It now keeps the game's own
+camera and only adds the smoothing movement.
+
 Changes in v0.1.8: Fixed the in-between frames made for 60 and 120 fps. The game
 moves its near and far planes every frame, and blending them made single frames
 show the hills fogged over or distant scenery drawn in front, which looked like

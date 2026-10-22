@@ -102,25 +102,38 @@ index 89f2425..5c83dbe 100644
                      matchingProfiler.log();
  
 diff --git a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projection_processor.cpp
-index e842dcc..9feb551 100644
+index e842dcc..44e1c23 100644
 --- a/src/render/rt64_projection_processor.cpp
 +++ b/src/render/rt64_projection_processor.cpp
-@@ -129,6 +129,15 @@ namespace RT64 {
-                 if (interpolateProjection) {
-                     projMatrix = lerpMatrix(adjustedPrevProj, curProjTransform, p.curFrameWeight);
-                     prevProjTransform = lerpMatrix(adjustedPrevProj, curProjTransform, p.prevFrameWeight);
+@@ -1,3 +1,4 @@
++#include <cmath>
+ //
+ // RT64
+ //
+@@ -144,6 +145,23 @@ namespace RT64 {
+ 
+             interop::float4x4 &prevViewProjTransform = drawData.prevViewProjTransforms[proj.transformsIndex];
+             prevViewProjTransform = hlslpp::mul(prevViewTransform, prevProjTransform);
 +
-+                    // Keep the depth column (near and far planes) of the current frame. Some games move the near and
-+                    // far planes every frame and place fog relative to them. The fog settings aren't interpolated, so
-+                    // blending the planes made fog and depth wrong on the in-between frames (whole hills fogged over,
-+                    // distant scenery drawn in front).
-+                    for (int r = 0; r < 4; r++) {
-+                        projMatrix[r][2] = curProjTransform[r][2];
-+                        prevProjTransform[r][2] = curProjTransform[r][2];
-+                    }
-                 }
-                 else {
-                     projMatrix = curProjTransform;
++            // Rebuilding the view-projection from its decomposed view and projection loses precision in the depth
++            // terms (the decomposition divides by a single, sometimes tiny, element). Depth near the far plane and
++            // the fog computed from it then jumped between frames, so distant hills flickered in and out of the fog.
++            // Instead, apply only the camera's movement to the game's own matrix, which keeps depth and fog exact.
++            if ((proj.type == Projection::Type::Perspective) && !workload.debuggerCamera.enabled) {
++                interop::float4x4 gameViewProj = drawData.viewProjTransforms[proj.transformsIndex];
++                adjustProjectionMatrix(gameViewProj, projRatioScale);
++                const hlslpp::float4x4 gameView = drawData.viewTransforms[proj.transformsIndex];
++                const float viewDet = hlslpp::determinant(extract3x3(gameView));
++                if (std::isfinite(viewDet) && (fabsf(viewDet) > 1e-6f)) {
++                    const hlslpp::float4x4 gameViewInverse = hlslpp::inverse(gameView);
++                    viewProjMatrix = hlslpp::mul(hlslpp::mul(viewMatrix, gameViewInverse), gameViewProj);
++                    prevViewProjTransform = hlslpp::mul(hlslpp::mul(prevViewTransform, gameViewInverse), gameViewProj);
++                }
++            }
++
+         }
+     }
+ 
 diff --git a/src/render/rt64_transform_processor.cpp b/src/render/rt64_transform_processor.cpp
 index cd8004d..d5e208f 100644
 --- a/src/render/rt64_transform_processor.cpp
