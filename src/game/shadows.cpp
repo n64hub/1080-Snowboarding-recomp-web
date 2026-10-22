@@ -107,12 +107,9 @@ uint32_t fade_calls = 0;
 // snow in places and slide into place over a few frames, so it is not done.
 
 // While the game builds the shadow matrix, the ground plane under the rider is
-// raised a little toward the rider so the depth test (game_shadow_render_mode)
+// raised a little toward the rider so the depth test (game_shadow_draw_end)
 // doesn't lose the shadow in the snow it lies on, then put back.
 constexpr float shadow_lift = 0.5f;
-// The game looks the shadow's render mode up when a course loads, so whether
-// the shadow is depth tested follows the setting at that time, not the current one.
-std::atomic<bool> shadow_depth_tested{ false };
 gpr lifted_plane = 0;
 uint32_t lifted_plane_d = 0;
 
@@ -138,7 +135,7 @@ extern "C" void game_shadow_direction(uint8_t* rdram, recomp_context* ctx) {
         store_float(rdram, dir + 0x4, std::signbit(y) ? -1.0f : 1.0f);
         store_float(rdram, dir + 0x8, 0.0f);
     }
-    if (!shadow_depth_tested.load(std::memory_order_relaxed)) {
+    if (mode() != ShadowMode::UnderRider) {
         return;
     }
 
@@ -190,22 +187,83 @@ extern "C" void game_shadow_alpha(uint8_t* rdram, recomp_context* ctx) {
     ctx->f10.fl *= fade.value;
 }
 
-// Called with a render mode the game just looked up in $v0. The shadow's mode
-// (0x41C8: blended, no depth test) draws it over hills that hide the rider.
-// Under Rider adds a depth test so the snow in front covers it. A decal depth
-// test would cut the shadow off wherever the slope curves away from the plane
-// it lies on, so the plane is lifted a little instead (game_shadow_direction).
-extern "C" void game_shadow_render_mode(uint8_t* rdram, recomp_context* ctx) {
-    constexpr uint32_t z_cmp = 0x10;
-    constexpr uint32_t zmode_mask = 0xC00;
-    constexpr uint32_t zmode_xlu = 0x800;
-    uint32_t v = static_cast<uint32_t>(ctx->r2);
-    if ((v & 0xFFFF) == 0x41C8) {
-        bool depth_test = (mode() == ShadowMode::UnderRider);
-        shadow_depth_tested.store(depth_test, std::memory_order_relaxed);
-        if (depth_test) {
-            v = (v & ~zmode_mask) | z_cmp | zmode_xlu;
-            ctx->r2 = static_cast<int32_t>(v);
+namespace {
+// The game's global draw state (bootup .data + 0x3C168). Its +0x254 -> +0x158
+// is the current display list builder, whose +0xC points at {commands, count}.
+constexpr uint32_t draw_state_offset = 0x3C168;
+constexpr uint32_t bootup_data_section = 4;
+
+bool is_rdram_pointer(gpr p) {
+    uint32_t u = static_cast<uint32_t>(p);
+    return u >= 0x80000000u && u < 0x80800000u && (u & 3) == 0;
+}
+
+// Address of the {commands, count} pair, or 0.
+gpr display_list_counter(uint8_t* rdram) {
+    gpr state = static_cast<int32_t>(MEM_W(0x254, static_cast<gpr>(static_cast<int32_t>(section_addresses[bootup_data_section] + draw_state_offset))));
+    if (!is_rdram_pointer(state)) {
+        return 0;
+    }
+    gpr builder = static_cast<int32_t>(MEM_W(0x158, state));
+    if (!is_rdram_pointer(builder)) {
+        return 0;
+    }
+    gpr counter = static_cast<int32_t>(MEM_W(0xC, builder));
+    return is_rdram_pointer(counter) ? counter : 0;
+}
+
+gpr shadow_counter = 0;
+uint32_t shadow_first_command = 0;
+
+// The shadow's material display list sets this render mode: blended, no depth
+// test, so the shadow showed through hills in front of the rider.
+constexpr uint32_t set_render_mode = 0xB900031D;   // G_SETOTHERMODE_L, shift 3, 29 bits
+constexpr uint32_t shadow_render_mode = 0x00442048;
+constexpr uint32_t z_cmp = 0x10;
+constexpr uint32_t zmode_xlu = 0x800;
+constexpr uint32_t depth_tested_render_mode = shadow_render_mode | z_cmp | zmode_xlu;
+}
+
+// Called just before the rider's shadow is set up and drawn.
+extern "C" void game_shadow_draw_begin(uint8_t* rdram, recomp_context* ctx) {
+    shadow_counter = display_list_counter(rdram);
+    shadow_first_command = shadow_counter ? MEM_W(4, shadow_counter) : 0;
+}
+
+// Called once the shadow's commands are in the display list. The shadow is the
+// rider's model flattened onto the ground, drawn through a small material
+// display list of its own; Under Rider switches that material's render mode to
+// a depth-tested one (and back for Original). The material is only read when
+// the frame is drawn, so changing it here takes effect this frame.
+extern "C" void game_shadow_draw_end(uint8_t* rdram, recomp_context* ctx) {
+    gpr counter = shadow_counter;
+    shadow_counter = 0;
+    if (counter == 0 || counter != display_list_counter(rdram)) {
+        return;
+    }
+    gpr commands = static_cast<int32_t>(MEM_W(0, counter));
+    uint32_t end = MEM_W(4, counter);
+    if (!is_rdram_pointer(commands) || end < shadow_first_command || end - shadow_first_command > 64) {
+        return;
+    }
+    uint32_t wanted = (mode() == ShadowMode::UnderRider) ? depth_tested_render_mode : shadow_render_mode;
+    for (uint32_t i = shadow_first_command; i < end; i++) {
+        gpr command = commands + i * 8;
+        if ((MEM_W(0, command) >> 24) != 0x06) {   // G_DL
+            continue;
+        }
+        gpr sub = static_cast<int32_t>(0x80000000u | (MEM_W(4, command) & 0x00FFFFFF));
+        for (uint32_t j = 0; j < 8; j++) {
+            gpr sub_command = sub + j * 8;
+            uint32_t w0 = MEM_W(0, sub_command);
+            if ((w0 >> 24) == 0xB8) {   // G_ENDDL
+                break;
+            }
+            uint32_t w1 = MEM_W(4, sub_command);
+            if (w0 == set_render_mode && (w1 == shadow_render_mode || w1 == depth_tested_render_mode)) {
+                MEM_W(4, sub_command) = wanted;
+                break;
+            }
         }
     }
 }

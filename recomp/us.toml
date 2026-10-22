@@ -106,6 +106,18 @@ func = "bootup_069370"
 before_vram = 0x81069464
 text = "    { void game_shadow_direction(uint8_t*, recomp_context*); game_shadow_direction(rdram, ctx); }"
 
+# The rider's shadow is drawn between these two points: the caller is about
+# to build the shadow matrix, and it has just finished the shadow's draws.
+[[patches.hook]]
+func = "bootup_00CFA0"
+before_vram = 0x8100D204
+text = "    { void game_shadow_draw_begin(uint8_t*, recomp_context*); game_shadow_draw_begin(rdram, ctx); }"
+
+[[patches.hook]]
+func = "bootup_00CFA0"
+before_vram = 0x8100D3B8
+text = "    { void game_shadow_draw_end(uint8_t*, recomp_context*); game_shadow_draw_end(rdram, ctx); }"
+
 # The shadow matrix has just been built from the ground plane.
 [[patches.hook]]
 func = "bootup_069370"
@@ -118,19 +130,6 @@ text = "    { void game_shadow_matrix_built(uint8_t*, recomp_context*); game_sha
 func = "bootup_00CFA0"
 before_vram = 0x8100D328
 text = "    { void game_shadow_alpha(uint8_t*, recomp_context*); game_shadow_alpha(rdram, ctx); }"
-
-# Render mode lookups for a material's draw mode (cycle 1 and cycle 2); the
-# result is in $v0. Shadows use the mode with no depth test (0x41C8), which
-# shadows.cpp can switch to a depth-tested decal.
-[[patches.hook]]
-func = "bootup_06A814"
-before_vram = 0x8106AA6C
-text = "    { void game_shadow_render_mode(uint8_t*, recomp_context*); game_shadow_render_mode(rdram, ctx); }"
-
-[[patches.hook]]
-func = "bootup_06AA78"
-before_vram = 0x8106ABE0
-text = "    { void game_shadow_render_mode(uint8_t*, recomp_context*); game_shadow_render_mode(rdram, ctx); }"
 
 # The rider update has the course scale in $f6 here (shadows.cpp needs it to
 # measure the rider's height above the ground at draw time).

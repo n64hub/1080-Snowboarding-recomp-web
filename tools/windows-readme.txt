@@ -17,10 +17,14 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
-Changes in v0.1.17: With Under Rider shadows, hills and banks in front of the
-rider now hide the shadow instead of it showing through them. The shadow sits a
-hair above the snow so the snow it lies on doesn't hide it. A change of the
-Rider Shadow setting takes full effect from the next course.
+Changes in v0.1.18: With Under Rider shadows, hills and banks in front of the
+rider now hide the shadow instead of it showing through them. (v0.1.17 meant to
+do this but changed a different draw, so it had no effect on the rider's
+shadow.) The shadow sits a hair above the snow so the snow it lies on doesn't
+hide it, and the setting takes effect immediately.
+
+Changes in v0.1.17: An attempt at the hill fix above that changed a different
+draw instead of the rider's shadow; v0.1.18 takes it out.
 
 Changes in v0.1.16: Under Rider shadow fades out sooner on jumps and eases in
 and out instead of flashing when the ground under the rider changes (over a
