@@ -17,6 +17,11 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.15: Character select and other screens whose frame pacing
+varies now smooth at the pace of their slowest frames, using the same whole
+frame rates (30, 20, 15...) as the rest of the game. v0.1.14 used in-between
+rates there, which could stop the game at the Match Race rider select.
+
 Changes in v0.1.14: RetroAchievements. Pick Achievements in the launcher and
 sign in with your RetroAchievements account to see this game's set and earn
 achievements as you ride, with a pop-up for each unlock. Only a sign-in token

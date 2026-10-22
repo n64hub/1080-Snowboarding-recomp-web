@@ -149,25 +149,27 @@ index cd8004d..d5e208f 100644
              const DrawData &drawData = workload.drawData;
              DrawBuffers &drawBuffers = workload.drawBuffers;
 diff --git a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
-index a870166..c6cf12c 100644
+index a870166..c70fd18 100644
 --- a/src/hle/rt64_vi.cpp
 +++ b/src/hle/rt64_vi.cpp
-@@ -167,7 +167,17 @@ namespace RT64 {
+@@ -167,7 +167,19 @@ namespace RT64 {
              return FullRate / factors[0];
          }
          else {
 -            return 0;
-+            // The game took a varying number of VIs per frame (2 then 3, say). Use the average rate
-+            // instead of giving up on frame interpolation for those scenes altogether.
-+            uint32_t sum = 0;
++            // The game took a varying number of VIs per frame (2 then 3, say). Interpolate at the
++            // rate of the slowest of those frames instead of turning frame interpolation off for
++            // the scene. That keeps the rate one of the whole fractions of 60 the rest of the
++            // interpolation code expects.
++            uint32_t slowest = 0;
 +            for (uint32_t factor : factors) {
 +                if (factor == 0) {
 +                    return 0;
 +                }
-+                sum += factor;
++                slowest = std::max(slowest, factor);
 +            }
 +            const uint32_t FullRate = 60;
-+            return (FullRate * uint32_t(factors.size()) + sum / 2) / sum;
++            return (slowest <= 6) ? (FullRate / slowest) : 0;
          }
      }
  
