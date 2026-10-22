@@ -104,3 +104,17 @@ text = "    { float game_cull_scale(void); ctx->f0.fl *= game_cull_scale(); }"
 func = "bootup_069370"
 before_vram = 0x81069464
 text = "    { void game_shadow_direction(uint8_t*, recomp_context*); game_shadow_direction(rdram, ctx); }"
+
+# Shadow alpha (112/255) is in $f10 here; the delay slot stores it at rider + 0x9F4
+# and the call hands the color to the scene.
+[[patches.hook]]
+func = "bootup_00CFA0"
+before_vram = 0x8100D328
+text = "    { void game_shadow_alpha(uint8_t*, recomp_context*); game_shadow_alpha(rdram, ctx); }"
+
+# The rider update has the course scale in $f6 here (shadows.cpp needs it to
+# measure the rider's height above the ground at draw time).
+[[patches.hook]]
+func = "bootup_00C234"
+before_vram = 0x8100C3C8
+text = "    { void game_shadow_scale(uint8_t*, recomp_context*); game_shadow_scale(rdram, ctx); }"

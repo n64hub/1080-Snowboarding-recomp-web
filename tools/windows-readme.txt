@@ -17,6 +17,10 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.11: Rider Shadow > Under Rider now fades the shadow out on big
+jumps instead of drawing it on whatever is far below (it could land on the far
+side of a hill), and steadies it when the ground under the rider changes.
+
 Changes in v0.1.10: New Settings > Graphics > Rider Shadow option. Original
 casts the shadow along the sun like the N64, so with a low sun it can land far
 from the rider and jump across the slope in the air. Under Rider keeps it
