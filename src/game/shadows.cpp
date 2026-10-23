@@ -479,10 +479,18 @@ constexpr uint32_t ex_push_projection = 0x6400001D;
 constexpr uint32_t ex_pop_projection = 0x6400001E;
 constexpr uint32_t ex_remap_depth = 0x64000035;
 constexpr uint32_t max_reflection_commands = 256;
-// The game draws the reflection with PRIMITIVE * TEXEL0 (no shading, so it
-// looks flat). Solid uses the rider's own TEXEL0 * SHADE for the color, with
-// the reflection's alpha, PRIMITIVE * TEXEL0, kept.
-constexpr uint32_t lit_textured_combine[2] = { 0xFC121624, 0xFF2FFFFF };
+// The game draws the reflection with PRIMITIVE * TEXEL0, which has no shading
+// and looks flat. Solid draws the rider's own TEXEL0 * SHADE, then the same
+// surfaces again lit in a plain icy grey (SHADE * PRIMITIVE) over it, which
+// mutes the colors while keeping the texture and shading. Both take their
+// alpha from the primitive color.
+constexpr uint32_t textured_combine[2] = { 0xFC121624, 0xFF2FFFFF };
+constexpr uint32_t grey_combine[2] = { 0xFC41FE83, 0xFFFFF7FB };
+constexpr uint32_t zmode_decal_bits = 0xC00;
+constexpr uint32_t reflection_grey = 0xB4C3D200;
+// Opacity of the textured layer and of the grey layer over it.
+constexpr float reflection_texture_opacity = 0.7f;
+constexpr float reflection_grey_opacity = 0.35f;
 
 }
 
@@ -542,8 +550,8 @@ extern "C" void game_reflection_matrix_built(uint8_t* rdram, recomp_context* ctx
 
 // Called once the reflection's commands are in the display list: a prim color
 // with its alpha, the matrix (the whole world to screen transform), a material
-// display list and the body parts. Solid redraws them as
-// one lit, textured, see-through pass.
+// display list and the body parts. Solid redraws them as one solid, muted,
+// see-through figure (see the passes below).
 extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     gpr counter = reflection_counter;
     reflection_counter = 0;
@@ -623,6 +631,16 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     }
     rider_draw_counter = 0;
 
+    // The display list's capacity is the word after its count; leave the
+    // reflection as the game made it if the passes would not fit.
+    uint32_t materials = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        materials += is_material[i] ? 1 : 0;
+    }
+    uint32_t needed = 16 + 4 * count + 7 * materials + rider_count;
+    if (start + needed > MEM_W(8, counter)) {
+        return;
+    }
     uint32_t out = start;
     auto put = [&](uint32_t w0, uint32_t w1) {
         MEM_W(0, commands + out * 8) = w0;
@@ -642,28 +660,61 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     // own copy of the projection (the game's fixed point matrices are far too
     // coarse for it at the course's coordinates).
     put(rt64_hook, rt64_enable);
-    put(dl_branch, physical(out + 1 + 3));
+    put(dl_branch, physical(out + 1 + 6));
     uint32_t params = out;
     for (int i = 0; i < 4; i++) {
         put_float(params, i, reflection_plane[i]);
     }
     put_float(params, 4, reflection_layer);
     put_float(params, 5, reflection_squeeze);
-    out += 3;
+    // The plane itself, unlifted and flat, for the last pass.
+    uint32_t flat_params = params + 3;
+    for (int i = 0; i < 3; i++) {
+        put_float(flat_params, i, reflection_plane[i]);
+    }
+    put_float(flat_params, 3, reflection_plane[3] - reflection_lift);
+    put_float(flat_params, 4, 0.0f);
+    put_float(flat_params, 5, 0.0f);
+    out += 6;
 
-    // One pass, see-through, depth tested but not written, so the
-    // rider drawn after it is never hidden by it, and a single pass can't
-    // flicker against itself.
+    // Three passes, so the parts read as one solid figure: the first only
+    // writes depth (alpha 0), keeping the nearest surface of the reflection;
+    // the textured and grey layers then draw as decals on exactly those
+    // surfaces, so overlapping parts never blend twice.
+    auto opacity = [&](float value) {
+        return static_cast<uint32_t>(std::clamp(std::lround(value * reflection_fade * 255.0f), 0L, 255L));
+    };
     put(ex_push_projection, 0);
     put(ex_remap_depth, 0);
     put(0, physical(params));
-    uint32_t alpha = static_cast<uint32_t>(std::lround((window[0][1] & 0xFF) * reflection_fade));
-    put(window[0][0], (window[0][1] & 0xFFFFFF00u) | alpha);
+    for (int pass = 0; pass < 3; pass++) {
+        uint32_t prim = pass == 0 ? 0xFFFFFF00u
+            : pass == 1 ? 0xFFFFFF00u | opacity(reflection_texture_opacity)
+            : reflection_grey | opacity(reflection_grey_opacity);
+        put(window[0][0], prim);
+        for (uint32_t i = 1; i < count; i++) {
+            put(window[i][0], window[i][1]);
+            if (is_material[i]) {
+                uint32_t mode = material_mode[i] & ~(zmode_mask | z_cmp | z_upd);
+                put(set_render_mode, mode | (pass == 0 ? (z_cmp | z_upd) : (z_cmp | zmode_decal_bits)));
+                const uint32_t* combine = pass == 2 ? grey_combine : textured_combine;
+                put(combine[0], combine[1]);
+            }
+        }
+    }
+    put(ex_pop_projection, 0);
+
+    // Last pass, depth only and with no depth test: moves the depth under the
+    // reflection back onto the ice plane, so the rider drawn after it is not hidden by the lifted
+    // reflection (its board sits right at the ice).
+    put(ex_push_projection, 0);
+    put(ex_remap_depth, 0);
+    put(0, physical(flat_params));
+    put(window[0][0], 0xFFFFFF00u);
     for (uint32_t i = 1; i < count; i++) {
         put(window[i][0], window[i][1]);
         if (is_material[i]) {
-            put(set_render_mode, (material_mode[i] & ~zmode_mask) | zmode_xlu | z_cmp);
-            put(lit_textured_combine[0], lit_textured_combine[1]);
+            put(set_render_mode, (material_mode[i] & ~(zmode_mask | z_cmp | z_upd)) | z_upd);
         }
     }
     put(ex_pop_projection, 0);
