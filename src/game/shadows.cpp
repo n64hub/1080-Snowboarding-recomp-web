@@ -402,8 +402,10 @@ extern "C" void game_board_mark_render_mode(uint8_t* rdram, recomp_context* ctx)
 // keeps only the parts that happen to lie close to the ice's depth, so the
 // copy looks patchy and faceted: overlapping parts stack up darker and parts
 // further below the ice drop out. "Solid" draws it as one figure:
-//  - its depth on screen is remapped to a thin layer just in front of the ice
-//    (nearest parts nearest), which moves nothing on screen;
+//  - its depth on screen is remapped (by RT64, see G_EX_REMAPPROJDEPTH_V1) to
+//    a thin layer just above the ice (nearest parts nearest), which moves
+//    nothing on screen; the layer sits a few units above the ground plane,
+//    since the ice the player sees is not exactly on it;
 //  - a first pass writes only that depth, and the visible pass then draws just
 //    the nearest surfaces, so the copy blends over the ice once;
 //  - it fades out as the rider rises off the ice.
@@ -446,6 +448,7 @@ namespace {
 // reflection_squeeze. The visible pass sits reflection_pass_gap nearer than the
 // depth pass so it passes on the surfaces the depth pass kept.
 constexpr float reflection_layer = 2e-5f;
+constexpr float reflection_lift = 3.0f;   // world units above the ice plane
 constexpr float reflection_squeeze = 2e-3f;
 constexpr float reflection_pass_gap = 2e-7f;
 
@@ -484,7 +487,7 @@ constexpr uint32_t max_reflection_commands = 256;
 // reflection ($s0 is the rider; the ground plane is at rider + 0x9D8).
 extern "C" void game_reflection_matrix_built(uint8_t* rdram, recomp_context* ctx) {
     reflection_counter = 0;
-    if (reflection_mode() != ReflectionMode::Solid) {
+    if (reflection_mode() == ReflectionMode::Original) {
         return;
     }
     gpr rider = ctx->r16;
@@ -498,6 +501,15 @@ extern "C" void game_reflection_matrix_built(uint8_t* rdram, recomp_context* ctx
     reflection_plane[1] = ny / len;
     reflection_plane[2] = nz / len;
     reflection_plane[3] = d / len;
+    // Face the plane up (toward the rider) and lift it a little: the ice the
+    // player sees is not exactly on the collision plane, and the reflection has
+    // to sit on top of it.
+    if (reflection_plane[1] < 0.0f) {
+        for (float& v : reflection_plane) {
+            v = -v;
+        }
+    }
+    reflection_plane[3] += reflection_lift;
 
     // Fade with the rider's height, eased like the shadow's.
     float height = height_above_ground(rdram, rider);
@@ -543,11 +555,15 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
         return;
     }
 
-    // The material is the first display list that sets a render mode.
-    uint32_t material = count;
-    uint32_t material_mode = 0;
-    for (uint32_t i = 2; i < count && material == count; i++) {
-        if ((window[i][0] >> 24) != op_dl) {
+    // Each part group starts with a material display list that sets the render
+    // mode; the passes override it after each one (fixing only the first left
+    // the other groups patchy).
+    static uint32_t material_mode[max_reflection_commands];
+    static bool is_material[max_reflection_commands];
+    bool any_material = false;
+    for (uint32_t i = 0; i < count; i++) {
+        is_material[i] = false;
+        if (i < 2 || (window[i][0] >> 24) != op_dl) {
             continue;
         }
         gpr sub = static_cast<int32_t>(0x80000000u | (window[i][1] & 0x00FFFFFF));
@@ -557,13 +573,13 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
                 break;
             }
             if (w0 == set_render_mode) {
-                material = i;
-                material_mode = MEM_W(4, sub + j * 8);
-                break;
+                is_material[i] = true;
+                material_mode[i] = MEM_W(4, sub + j * 8);
+                any_material = true;
             }
         }
     }
-    if (material == count) {
+    if (!any_material) {
         return;
     }
 
@@ -599,16 +615,14 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     out += 6;
 
     // Depth pass: alpha 0, depth tested and written.
-    const uint32_t depth_mode = (material_mode & ~zmode_mask) | z_cmp | z_upd;
-    const uint32_t visible_mode = (material_mode & ~zmode_mask) | zmode_xlu | z_cmp;
     put(ex_push_projection, 0);
     put(ex_remap_depth, 0);
     put(0, physical(params));
     put(window[0][0], window[0][1] & 0xFFFFFF00u);
     for (uint32_t i = 1; i < count; i++) {
         put(window[i][0], window[i][1]);
-        if (i == material) {
-            put(set_render_mode, depth_mode);
+        if (is_material[i]) {
+            put(set_render_mode, (material_mode[i] & ~zmode_mask) | z_cmp | z_upd);
         }
     }
     put(ex_pop_projection, 0);
@@ -622,11 +636,26 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     put(window[0][0], (window[0][1] & 0xFFFFFF00u) | alpha);
     for (uint32_t i = 1; i < count; i++) {
         put(window[i][0], window[i][1]);
-        if (i == material) {
-            put(set_render_mode, visible_mode);
+        if (is_material[i]) {
+            put(set_render_mode, (material_mode[i] & ~zmode_mask) | zmode_xlu | z_cmp);
         }
     }
     put(ex_pop_projection, 0);
     put(rt64_hook, rt64_disable);
     MEM_W(4, counter) = out;
+}
+
+// Called with the render mode snoweffects is about to put in the display list
+// for the trail the board leaves in the snow (0x00404240: blended, no depth
+// test), so the trail showed in front of hills the rider had gone behind, like
+// the board mark above. Under Rider makes it a decal on the snow as well.
+extern "C" void game_trail_render_mode(uint8_t* rdram, recomp_context* ctx) {
+    constexpr uint32_t trail_mode = 0x00404240;
+    uint32_t v = static_cast<uint32_t>(ctx->r9);
+    if (v != trail_mode || mode() != ShadowMode::UnderRider) {
+        return;
+    }
+    constexpr uint32_t zmode_decal = 0xC00;
+    v = (v & ~zmode_mask) | z_cmp | zmode_decal;
+    ctx->r9 = static_cast<int32_t>(v);
 }

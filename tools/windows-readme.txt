@@ -17,6 +17,12 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.25: Ice Reflection Solid now applies to the whole rider (in
+v0.1.24 only the first group of body parts changed, so it still looked patchy)
+and sits just above the ice so it shows steadily. Under Rider: the trail the
+board leaves in the snow no longer shows in front of a hill the rider has gone
+behind. It takes effect from the next course you load.
+
 Changes in v0.1.24: New Ice Reflection option (Graphics, default Solid). The
 upside-down rider on ice is drawn as one evenly see-through figure instead of
 patchy overlapping body parts, and fades out as the rider leaves the ice.

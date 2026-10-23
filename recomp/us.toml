@@ -176,3 +176,11 @@ func = "bootup_00CFA0"
 before_vram = 0x8100D1C8
 text = "    { void game_reflection_drawn(uint8_t*, recomp_context*); game_reflection_drawn(rdram, ctx); }"
 
+
+# Snow trail (shadows.cpp): snoweffects has the trail's render mode in $t1
+# here, just before it is stored in the display list.
+[[patches.hook]]
+func = "snoweffects_004188"
+before_vram = 0x81C9E23C
+text = "    { void game_trail_render_mode(uint8_t*, recomp_context*); game_trail_render_mode(rdram, ctx); }"
+
