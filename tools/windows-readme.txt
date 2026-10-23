@@ -17,6 +17,10 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.26: Ice Reflection Solid no longer covers the rider's board
+and legs or flickers on ice. The reflection is now drawn once, behind the rider,
+with a light icy-blue tint so it reads as a reflection seen in the ice.
+
 Changes in v0.1.25: Ice Reflection Solid now applies to the whole rider (in
 v0.1.24 only the first group of body parts changed, so it still looked patchy)
 and sits just above the ice so it shows steadily. Under Rider: the trail the

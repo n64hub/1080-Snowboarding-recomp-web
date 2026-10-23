@@ -444,13 +444,15 @@ void add_reflection_option(recomp::config::Config& graphics) {
 
 namespace {
 // Depth remap, in normalized device depth (z / w): the reflection is moved to
-// reflection_layer in front of the ice, its own depths squeezed by
-// reflection_squeeze. The visible pass sits reflection_pass_gap nearer than the
-// depth pass so it passes on the surfaces the depth pass kept.
-constexpr float reflection_layer = 2e-5f;
-constexpr float reflection_lift = 3.0f;   // world units above the ice plane
-constexpr float reflection_squeeze = 2e-3f;
-constexpr float reflection_pass_gap = 2e-7f;
+// reflection_layer in front of the ice plane, and its own depth below the plane
+// is scaled by reflection_squeeze. A negative squeeze puts the parts deep under
+// the plane (far from the board) a little above the ice, where the sloped ice
+// the player sees may sit higher than the collision plane, while the parts near
+// the board stay at the ice and behind the rider.
+constexpr float reflection_layer = 1e-6f;
+constexpr float reflection_squeeze = -0.5f;
+// How far the reflection's color is mixed toward icy blue.
+constexpr float reflection_tint = 0.35f;
 
 // The reflection fades between these heights of the rider above the ice
 // (see height_above_ground; about 15 while riding).
@@ -483,6 +485,18 @@ constexpr uint32_t max_reflection_commands = 256;
 
 }
 
+// Mixes the reflection's prim color toward an icy blue (rgb only).
+static uint32_t tint_prim(uint32_t prim, float amount) {
+    const float ice[3] = { 150.0f, 200.0f, 255.0f };
+    uint32_t out = 0;
+    for (int c = 0; c < 3; c++) {
+        float v = static_cast<float>((prim >> (24 - 8 * c)) & 0xFF);
+        v += (ice[c] - v) * amount;
+        out |= static_cast<uint32_t>(std::clamp(std::lround(v), 0L, 255L)) << (24 - 8 * c);
+    }
+    return out;
+}
+
 // Called right after the game builds the mirror matrix for the rider's
 // reflection ($s0 is the rider; the ground plane is at rider + 0x9D8).
 extern "C" void game_reflection_matrix_built(uint8_t* rdram, recomp_context* ctx) {
@@ -501,15 +515,12 @@ extern "C" void game_reflection_matrix_built(uint8_t* rdram, recomp_context* ctx
     reflection_plane[1] = ny / len;
     reflection_plane[2] = nz / len;
     reflection_plane[3] = d / len;
-    // Face the plane up (toward the rider) and lift it a little: the ice the
-    // player sees is not exactly on the collision plane, and the reflection has
-    // to sit on top of it.
+    // Face the plane up, toward the rider.
     if (reflection_plane[1] < 0.0f) {
         for (float& v : reflection_plane) {
             v = -v;
         }
     }
-    reflection_plane[3] += reflection_lift;
 
     // Fade with the rider's height, eased like the shadow's.
     float height = height_above_ground(rdram, rider);
@@ -531,8 +542,8 @@ extern "C" void game_reflection_matrix_built(uint8_t* rdram, recomp_context* ctx
 
 // Called once the reflection's commands are in the display list: a prim color
 // with its alpha, the matrix (the whole world to screen transform), a material
-// display list and the body parts. Solid rewrites them as a depth pass followed
-// by the visible pass.
+// display list and the body parts. Solid redraws them as
+// one tinted, see-through pass.
 extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     gpr counter = reflection_counter;
     reflection_counter = 0;
@@ -602,38 +613,23 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     // own copy of the projection (the game's fixed point matrices are far too
     // coarse for it at the course's coordinates).
     put(rt64_hook, rt64_enable);
-    put(dl_branch, physical(out + 1 + 6));
+    put(dl_branch, physical(out + 1 + 3));
     uint32_t params = out;
-    for (int pass = 0; pass < 2; pass++) {
-        uint32_t block = params + pass * 3;
-        for (int i = 0; i < 4; i++) {
-            put_float(block, i, reflection_plane[i]);
-        }
-        put_float(block, 4, reflection_layer + (pass == 1 ? reflection_pass_gap : 0.0f));
-        put_float(block, 5, reflection_squeeze);
+    for (int i = 0; i < 4; i++) {
+        put_float(params, i, reflection_plane[i]);
     }
-    out += 6;
+    put_float(params, 4, reflection_layer);
+    put_float(params, 5, reflection_squeeze);
+    out += 3;
 
-    // Depth pass: alpha 0, depth tested and written.
+    // One pass, tinted and see-through, depth tested but not written. The rider
+    // is drawn before its reflection, so the reflection must stay behind it in
+    // depth, and a single pass can't flicker against itself.
     put(ex_push_projection, 0);
     put(ex_remap_depth, 0);
     put(0, physical(params));
-    put(window[0][0], window[0][1] & 0xFFFFFF00u);
-    for (uint32_t i = 1; i < count; i++) {
-        put(window[i][0], window[i][1]);
-        if (is_material[i]) {
-            put(set_render_mode, (material_mode[i] & ~zmode_mask) | z_cmp | z_upd);
-        }
-    }
-    put(ex_pop_projection, 0);
-
-    // Visible pass: a hair nearer, the alpha faded, drawn where it is in front
-    // of (or at) what the depth pass kept.
-    put(ex_push_projection, 0);
-    put(ex_remap_depth, 0);
-    put(0, physical(params + 3));
     uint32_t alpha = static_cast<uint32_t>(std::lround((window[0][1] & 0xFF) * reflection_fade));
-    put(window[0][0], (window[0][1] & 0xFFFFFF00u) | alpha);
+    put(window[0][0], tint_prim(window[0][1], reflection_tint) | alpha);
     for (uint32_t i = 1; i < count; i++) {
         put(window[i][0], window[i][1]);
         if (is_material[i]) {
