@@ -184,3 +184,8 @@ func = "snoweffects_004188"
 before_vram = 0x81C9E23C
 text = "    { void game_trail_render_mode(uint8_t*, recomp_context*); game_trail_render_mode(rdram, ctx); }"
 
+
+[[patches.hook]]
+func = "bootup_00CFA0"
+before_vram = 0x8100CFAC
+text = "    { void game_rider_draw_start(uint8_t*, recomp_context*); game_rider_draw_start(rdram, ctx); }"

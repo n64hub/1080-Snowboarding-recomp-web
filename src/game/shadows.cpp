@@ -443,14 +443,13 @@ void add_reflection_option(recomp::config::Config& graphics) {
 }
 
 namespace {
-// Depth remap, in normalized device depth (z / w): the reflection is moved to
-// reflection_layer in front of the ice plane, and its own depth below the plane
-// is scaled by reflection_squeeze. A negative squeeze puts the parts deep under
-// the plane (far from the board) a little above the ice, where the sloped ice
-// the player sees may sit higher than the collision plane, while the parts near
-// the board stay at the ice and behind the rider.
-constexpr float reflection_layer = 1e-6f;
-constexpr float reflection_squeeze = -0.5f;
+// Depth remap, in normalized device depth (z / w): the reflection is moved onto
+// the ice plane, lifted reflection_lift world units (the ice the player sees
+// sits above the collision plane, which hid the reflection at 0), with its own
+// depths squeezed by reflection_squeeze.
+constexpr float reflection_lift = 3.0f;
+constexpr float reflection_layer = 0.0f;
+constexpr float reflection_squeeze = 2e-3f;
 // How far the reflection's color is mixed toward icy blue.
 constexpr float reflection_tint = 0.35f;
 
@@ -497,6 +496,16 @@ static uint32_t tint_prim(uint32_t prim, float amount) {
     return out;
 }
 
+// Called as bootup_00CFA0 starts drawing a rider: when the game draws the rider's
+// body there (the attract demo's riders do; the player's rider in a race is drawn
+// after its reflection), the reflection has to be moved in front of it.
+gpr rider_draw_counter = 0;
+uint32_t rider_draw_first_command = 0;
+extern "C" void game_rider_draw_start(uint8_t* rdram, recomp_context* ctx) {
+    rider_draw_counter = display_list_counter(rdram);
+    rider_draw_first_command = rider_draw_counter ? MEM_W(4, rider_draw_counter) : 0;
+}
+
 // Called right after the game builds the mirror matrix for the rider's
 // reflection ($s0 is the rider; the ground plane is at rider + 0x9D8).
 extern "C" void game_reflection_matrix_built(uint8_t* rdram, recomp_context* ctx) {
@@ -515,12 +524,13 @@ extern "C" void game_reflection_matrix_built(uint8_t* rdram, recomp_context* ctx
     reflection_plane[1] = ny / len;
     reflection_plane[2] = nz / len;
     reflection_plane[3] = d / len;
-    // Face the plane up, toward the rider.
+    // Face the plane up, toward the rider, and lift it.
     if (reflection_plane[1] < 0.0f) {
         for (float& v : reflection_plane) {
             v = -v;
         }
     }
+    reflection_plane[3] += reflection_lift;
 
     // Fade with the rider's height, eased like the shadow's.
     float height = height_above_ground(rdram, rider);
@@ -594,7 +604,36 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
         return;
     }
 
-    uint32_t out = first;
+    // Commands drawn since game_rider_draw_start (the rider's body, when it is
+    // drawn here) are moved after the reflection, so the rider always covers it.
+    uint32_t start = first;
+    static uint32_t rider_commands[max_reflection_commands][2];
+    uint32_t rider_count = 0;
+    if (rider_draw_counter == counter && rider_draw_first_command < first &&
+        first - rider_draw_first_command <= max_reflection_commands) {
+        uint32_t buffer_start = static_cast<uint32_t>(commands) & 0x00FFFFFFu;
+        uint32_t buffer_end = buffer_start + end * 8;
+        bool movable = true;
+        for (uint32_t i = 0; i < first - rider_draw_first_command; i++) {
+            uint32_t w0 = MEM_W(0, commands + (rider_draw_first_command + i) * 8);
+            uint32_t w1 = MEM_W(4, commands + (rider_draw_first_command + i) * 8);
+            uint32_t target = w1 & 0x00FFFFFFu;
+            // A display list call into this buffer would break once moved.
+            if ((w0 >> 24) == op_dl && target >= buffer_start && target < buffer_end) {
+                movable = false;
+                break;
+            }
+            rider_commands[i][0] = w0;
+            rider_commands[i][1] = w1;
+        }
+        if (movable) {
+            start = rider_draw_first_command;
+            rider_count = first - start;
+        }
+    }
+    rider_draw_counter = 0;
+
+    uint32_t out = start;
     auto put = [&](uint32_t w0, uint32_t w1) {
         MEM_W(0, commands + out * 8) = w0;
         MEM_W(4, commands + out * 8) = w1;
@@ -622,9 +661,9 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     put_float(params, 5, reflection_squeeze);
     out += 3;
 
-    // One pass, tinted and see-through, depth tested but not written. The rider
-    // is drawn before its reflection, so the reflection must stay behind it in
-    // depth, and a single pass can't flicker against itself.
+    // One pass, tinted and see-through, depth tested but not written, so the
+    // rider drawn after it is never hidden by it, and a single pass can't
+    // flicker against itself.
     put(ex_push_projection, 0);
     put(ex_remap_depth, 0);
     put(0, physical(params));
@@ -638,6 +677,9 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     }
     put(ex_pop_projection, 0);
     put(rt64_hook, rt64_disable);
+    for (uint32_t i = 0; i < rider_count; i++) {
+        put(rider_commands[i][0], rider_commands[i][1]);
+    }
     MEM_W(4, counter) = out;
 }
 
