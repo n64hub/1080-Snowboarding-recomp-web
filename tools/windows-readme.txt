@@ -17,6 +17,9 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.31: The ice reflection is tinted the grey-green of the ice
+itself. Ice Reflection Original still gives the N64 look.
+
 Changes in v0.1.30: In widescreen, the sides of 2D screens that only cover the
 middle 4:3 area (such as name entry) are now black, instead of keeping leftover
 pictures from the screen before. The ice reflection is a little greyer and
