@@ -17,6 +17,11 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.30: In widescreen, the sides of 2D screens that only cover the
+middle 4:3 area (such as name entry) are now black, instead of keeping leftover
+pictures from the screen before. The ice reflection is a little greyer and
+bluer.
+
 Changes in v0.1.29: Ice Reflection Solid draws the reflection as one solid
 figure in muted, icy colors, keeping the rider's textures and shading, instead
 of see-through body parts stacking on each other. The rider is still drawn over

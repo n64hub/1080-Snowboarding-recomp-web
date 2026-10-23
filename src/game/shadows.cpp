@@ -481,16 +481,16 @@ constexpr uint32_t ex_remap_depth = 0x64000035;
 constexpr uint32_t max_reflection_commands = 256;
 // The game draws the reflection with PRIMITIVE * TEXEL0, which has no shading
 // and looks flat. Solid draws the rider's own TEXEL0 * SHADE, then the same
-// surfaces again lit in a plain icy grey (SHADE * PRIMITIVE) over it, which
+// surfaces again lit in a pale sky blue (SHADE * PRIMITIVE) over it, which
 // mutes the colors while keeping the texture and shading. Both take their
 // alpha from the primitive color.
 constexpr uint32_t textured_combine[2] = { 0xFC121624, 0xFF2FFFFF };
 constexpr uint32_t grey_combine[2] = { 0xFC41FE83, 0xFFFFF7FB };
 constexpr uint32_t zmode_decal_bits = 0xC00;
-constexpr uint32_t reflection_grey = 0xB4C3D200;
-// Opacity of the textured layer and of the grey layer over it.
+constexpr uint32_t reflection_grey = 0xA6CCF000;
+// Opacity of the textured layer and of the blue layer over it.
 constexpr float reflection_texture_opacity = 0.7f;
-constexpr float reflection_grey_opacity = 0.35f;
+constexpr float reflection_grey_opacity = 0.5f;
 
 }
 

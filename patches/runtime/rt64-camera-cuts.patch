@@ -462,3 +462,127 @@ index 61bb3b1..bf80c56 100644
          void popMatrix(uint32_t count);
          void pushProjectionMatrix();
          void popProjectionMatrix();
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+index 31338ef..3552691 100644
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -1250,6 +1250,10 @@ namespace RT64 {
+ 
+         bool depthState = false;
+         worker->commandList->setFramebuffer(targetDrawCall.fbStorage->colorDepthWrite.get());
++        if (framebuffer.clearSides && (colorTarget != nullptr)) {
++            worker->commandList->clearColor(0, RenderColor(0.0f, 0.0f, 0.0f, 1.0f), framebuffer.sideRects, 2);
++        }
++
+         for (const auto &pair : targetDrawCall.sceneIndices) {
+ #       if RT_ENABLED
+             if (pair.second) {
+@@ -1449,6 +1453,95 @@ namespace RT64 {
+         const bool adjustRatio = !adjustedProjectionPair &&
+             (abs((scissorRatio / p.aspectRatioSource) - 1.0f) < SimilarityPercentage);
+         const float aspectRatioScale = adjustRatio ? (p.aspectRatioTarget / p.aspectRatioSource) : 1.0f;
++
++        // Widescreen sides. The game only draws inside the 4:3 area, so the extended sides of its color
++        // framebuffer keep whatever an earlier frame left there unless a full-width draw covers them.
++        // When nothing this frame reaches the sides across the full height, clear them to black before
++        // the first pair that draws into this framebuffer.
++        framebuffer.clearSides = false;
++        if ((p.fbStorage->colorTarget != nullptr) && (aspectRatioScale > 1.0f)) {
++            bool firstPair = true;
++            for (uint32_t f = 0; (f < p.fbPairIndex) && firstPair; f++) {
++                firstPair = (p.curWorkload->fbPairs[f].colorImage.address != fbPair.colorImage.address);
++            }
++
++            if (firstPair) {
++                thread_local std::vector<std::pair<int32_t, int32_t>> spans;
++                spans.clear();
++                for (uint32_t f = p.fbPairIndex; f < p.curWorkload->fbPairCount; f++) {
++                    const FramebufferPair &pair = p.curWorkload->fbPairs[f];
++                    if (pair.colorImage.address != fbPair.colorImage.address) {
++                        continue;
++                    }
++
++                    for (uint32_t pr = 0; pr < pair.projectionCount; pr++) {
++                        const Projection &proj = pair.projections[pr];
++                        if (proj.scissorRect.isNull()) {
++                            continue;
++                        }
++
++                        if (proj.usesViewport()) {
++                            const auto &viewport = drawData.rspViewports[proj.transformsIndex];
++                            FixedRect rect = proj.scissorRect.intersection(viewport.rect(&drawData.viewportClipRatios[proj.transformsIndex * 4]));
++                            const bool wide = !rect.isEmpty() && (drawData.viewportOrigins[proj.transformsIndex] == G_EX_ORIGIN_NONE) &&
++                                (rect.ulx <= pair.scissorRect.ulx) && (rect.lrx >= pair.scissorRect.lrx);
++                            if (wide && (proj.gameCallCount > 0)) {
++                                spans.emplace_back(rect.uly, rect.lry);
++                            }
++
++                            continue;
++                        }
++
++                        for (uint32_t d = 0; d < proj.gameCallCount; d++) {
++                            const GameCall &call = proj.gameCalls[d];
++                            const FixedRect &rect = call.callDesc.rect;
++                            const bool fullWidth = (rect.ulx <= pair.scissorRect.ulx) && (rect.lrx >= pair.scissorRect.lrx);
++                            bool covers = false;
++                            if (call.callDesc.otherMode.cycleType() == G_CYC_FILL) {
++                                covers = fullWidth;
++                            }
++                            else if (proj.type == Projection::Type::Rectangle) {
++                                const bool regularOrigins = (call.callDesc.rectLeftOrigin == G_EX_ORIGIN_NONE) && (call.callDesc.rectRightOrigin == G_EX_ORIGIN_NONE);
++                                covers = (call.callDesc.rectAspect != G_EX_ASPECT_ADJUST) && ((regularOrigins && fullWidth) || (call.callDesc.rectAspect == G_EX_ASPECT_STRETCH));
++                            }
++
++                            if (covers) {
++                                FixedRect clipped = rect.intersection(call.callDesc.scissorRect);
++                                if (!clipped.isEmpty()) {
++                                    spans.emplace_back(clipped.uly, clipped.lry);
++                                }
++                            }
++                        }
++                    }
++                }
++
++                // Allow a two pixel gap (rects are in quarter pixels).
++                const int32_t Tolerance = 8;
++                std::sort(spans.begin(), spans.end());
++                int32_t coveredTo = fbPair.scissorRect.uly;
++                for (const auto &span : spans) {
++                    if (span.first > coveredTo + Tolerance) {
++                        break;
++                    }
++
++                    coveredTo = std::max(coveredTo, span.second);
++                }
++
++                if (coveredTo + Tolerance < fbPair.scissorRect.lry) {
++                    const float sidesWideWidth = p.fbWidth * p.resolutionScale.x;
++                    const float sidesOriginalWidth = p.fbWidth * p.resolutionScale.y;
++                    const int32_t left = int32_t(floorf((sidesWideWidth - sidesOriginalWidth) / 2.0f));
++                    const int32_t right = int32_t(ceilf((sidesWideWidth + sidesOriginalWidth) / 2.0f));
++                    const int32_t width = int32_t(p.fbStorage->colorTarget->width);
++                    const int32_t height = int32_t(p.fbStorage->colorTarget->height);
++                    if ((left > 0) && (right < width)) {
++                        framebuffer.clearSides = true;
++                        framebuffer.sideRects[0] = RenderRect(0, 0, left, height);
++                        framebuffer.sideRects[1] = RenderRect(right, 0, width, height);
++                    }
++                }
++            }
++        }
+         InstanceDrawCall instanceDrawCall;
+         interop::RenderIndices renderIndices;
+         uint32_t globalCallIndex = 0;
+diff --git a/src/render/rt64_framebuffer_renderer.h b/src/render/rt64_framebuffer_renderer.h
+index 3add9c3..ed9871d 100644
+--- a/src/render/rt64_framebuffer_renderer.h
++++ b/src/render/rt64_framebuffer_renderer.h
+@@ -118,6 +118,8 @@ namespace RT64 {
+             std::set<RenderTarget *> transitionRenderTargetSet;
+             RenderTargetDrawCall renderTargetDrawCall;
+             RenderViewport viewport;
++            bool clearSides = false;
++            RenderRect sideRects[2];
+         };
+ 
+         std::vector<Framebuffer> framebufferVector;
