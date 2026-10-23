@@ -450,8 +450,6 @@ namespace {
 constexpr float reflection_lift = 3.0f;
 constexpr float reflection_layer = 0.0f;
 constexpr float reflection_squeeze = 2e-3f;
-// How far the reflection's color is mixed toward icy blue.
-constexpr float reflection_tint = 0.35f;
 
 // The reflection fades between these heights of the rider above the ice
 // (see height_above_ground; about 15 while riding).
@@ -481,19 +479,11 @@ constexpr uint32_t ex_push_projection = 0x6400001D;
 constexpr uint32_t ex_pop_projection = 0x6400001E;
 constexpr uint32_t ex_remap_depth = 0x64000035;
 constexpr uint32_t max_reflection_commands = 256;
+// The game draws the reflection with PRIMITIVE * TEXEL0 (no shading, so it
+// looks flat). Solid uses the rider's own TEXEL0 * SHADE for the color, with
+// the reflection's alpha, PRIMITIVE * TEXEL0, kept.
+constexpr uint32_t lit_textured_combine[2] = { 0xFC121624, 0xFF2FFFFF };
 
-}
-
-// Mixes the reflection's prim color toward an icy blue (rgb only).
-static uint32_t tint_prim(uint32_t prim, float amount) {
-    const float ice[3] = { 150.0f, 200.0f, 255.0f };
-    uint32_t out = 0;
-    for (int c = 0; c < 3; c++) {
-        float v = static_cast<float>((prim >> (24 - 8 * c)) & 0xFF);
-        v += (ice[c] - v) * amount;
-        out |= static_cast<uint32_t>(std::clamp(std::lround(v), 0L, 255L)) << (24 - 8 * c);
-    }
-    return out;
 }
 
 // Called as bootup_00CFA0 starts drawing a rider: when the game draws the rider's
@@ -553,7 +543,7 @@ extern "C" void game_reflection_matrix_built(uint8_t* rdram, recomp_context* ctx
 // Called once the reflection's commands are in the display list: a prim color
 // with its alpha, the matrix (the whole world to screen transform), a material
 // display list and the body parts. Solid redraws them as
-// one tinted, see-through pass.
+// one lit, textured, see-through pass.
 extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     gpr counter = reflection_counter;
     reflection_counter = 0;
@@ -661,18 +651,19 @@ extern "C" void game_reflection_drawn(uint8_t* rdram, recomp_context* ctx) {
     put_float(params, 5, reflection_squeeze);
     out += 3;
 
-    // One pass, tinted and see-through, depth tested but not written, so the
+    // One pass, see-through, depth tested but not written, so the
     // rider drawn after it is never hidden by it, and a single pass can't
     // flicker against itself.
     put(ex_push_projection, 0);
     put(ex_remap_depth, 0);
     put(0, physical(params));
     uint32_t alpha = static_cast<uint32_t>(std::lround((window[0][1] & 0xFF) * reflection_fade));
-    put(window[0][0], tint_prim(window[0][1], reflection_tint) | alpha);
+    put(window[0][0], (window[0][1] & 0xFFFFFF00u) | alpha);
     for (uint32_t i = 1; i < count; i++) {
         put(window[i][0], window[i][1]);
         if (is_material[i]) {
             put(set_render_mode, (material_mode[i] & ~zmode_mask) | zmode_xlu | z_cmp);
+            put(lit_textured_combine[0], lit_textured_combine[1]);
         }
     }
     put(ex_pop_projection, 0);
