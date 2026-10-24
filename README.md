@@ -1,6 +1,6 @@
 <h1 align="center">1080° Snowboarding: Recompiled</h1>
 
-<p align="center">A native PC port of the 1998 N64 snowboarding game 1080° Snowboarding, built with static recompilation, with widescreen, 60 and 120 fps, longer draw distance, HD boards and more, all optional.</p>
+<p align="center">A native PC port of the 1998 N64 snowboarding game 1080° Snowboarding, built with static recompilation, with widescreen, 60 and 120 fps, longer draw distance, HD boards, RetroAchievements and more, all optional.<br>Made by Vibe Slop Studios.</p>
 
 <p align="center">
   <a href="https://github.com/thebradshaw/1080-Snowboarding-decomp/releases/latest/download/1080SnowboardingRecompiled-windows-x64.zip"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-Windows%20(x64)-2a6fe8?style=for-the-badge&logo=windows&logoColor=white" height="44"></a>
@@ -47,7 +47,11 @@ Every enhancement can be turned off to get the N64 look back. All of them are on
 | Ice Reflection | **Solid** draws the rider's reflection as one see-through figure; **Original** keeps the N64's patchy look |
 | CRT Filter | **Scanlines** or a full **CRT** look (off by default) |
 
-Keyboard, mouse and gamepads all work, and controls can be remapped in Controls. The Mods menu loads RT64 texture packs and code mods, and Achievements signs in to RetroAchievements.
+Keyboard, mouse and gamepads all work, and controls can be remapped in Controls. The Mods menu loads RT64 texture packs and code mods.
+
+## RetroAchievements
+
+Choose **Achievements** on the launcher and sign in with your [RetroAchievements](https://retroachievements.org) account to play for the 1080° Snowboarding achievement set. Only the session token is kept, never your password, and the achievement list is downloaded from RetroAchievements when you play. Until RetroAchievements approves this port, unlocks are saved on your PC only and are not sent to the site.
 
 Settings, controls and saves live in `%LOCALAPPDATA%\1080SnowboardingRecompiled` (on Linux, `~/.config/1080SnowboardingRecompiled`). To keep everything next to the exe instead, create an empty file named `portable.txt` there. Each run writes `log.txt` to the same folder; send it along when you report a problem.
 
