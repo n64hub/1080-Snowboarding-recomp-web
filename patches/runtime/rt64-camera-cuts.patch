@@ -597,3 +597,133 @@ index cd8004d..d5e208f 100644
              Workload &workload = p.workloadQueue->workloads[w];
              const DrawData &drawData = workload.drawData;
              DrawBuffers &drawBuffers = workload.drawBuffers;
+diff --git a/src/render/rt64_vi_renderer.cpp b/src/render/rt64_vi_renderer.cpp
+index b4ff4e9..ca53c14 100644
+--- a/src/render/rt64_vi_renderer.cpp
++++ b/src/render/rt64_vi_renderer.cpp
+@@ -4,10 +4,16 @@
+ 
+ #include "rt64_vi_renderer.h"
+ 
++#include <algorithm>
++#include <atomic>
++
+ #include "shared/rt64_hlsl.h"
+ #include "shared/rt64_video_interface.h"
+ 
+ namespace RT64 {
++    // CRT filter chosen by the game (0 = off, 1 = scanlines, 2 = CRT). Added for 1080 Snowboarding: Recompiled.
++    static std::atomic<uint32_t> crtFilterMode{ 0 };
++
+     // VIRenderer
+ 
+     VIRenderer::VIRenderer() { }
+@@ -77,6 +83,8 @@ namespace RT64 {
+         pushConstants.videoResolution = computeHDSize(hlslpp::float2(p.vi->fbSize()), p.resolutionScale, p.downsamplingScale);
+         pushConstants.textureResolution = { float(p.textureWidth), float(p.textureHeight) };
+         pushConstants.gamma = p.vi->gamma();
++        pushConstants.crtMode = float(crtFilterMode.load(std::memory_order_relaxed));
++        pushConstants.crtLines = std::max(float(p.vi->viewRectangle().w) * 240.0f, 1.0f);
+ 
+         p.commandList->setPipeline(shader->pipeline.get());
+         p.commandList->setGraphicsPipelineLayout(shader->pipelineLayout.get());
+@@ -122,4 +130,8 @@ namespace RT64 {
+         viewport = RenderViewport(topLeftViewport.x, topLeftViewport.y, bottomRightViewport.x - topLeftViewport.x, bottomRightViewport.y - topLeftViewport.y);
+         scissor = RenderRect(lround(topLeftScissor.x), lround(topLeftScissor.y), lround(bottomRightScissor.x), lround(bottomRightScissor.y));
+     }
+-};
+\ No newline at end of file
++};
++
++extern "C" void rt64_set_crt_filter(uint32_t mode) {
++    RT64::crtFilterMode.store(mode, std::memory_order_relaxed);
++}
+diff --git a/src/shaders/VideoInterfacePS.hlsl b/src/shaders/VideoInterfacePS.hlsl
+index 3f33475..51c28c3 100644
+--- a/src/shaders/VideoInterfacePS.hlsl
++++ b/src/shaders/VideoInterfacePS.hlsl
+@@ -32,10 +32,67 @@ float4 PixelAntialiasing(float2 uv) {
+     return SampleInput(uvTexspace / gConstants.textureResolution);
+ }
+ 
+-float4 PSMain(in float4 pos : SV_Position, in float2 uv : TEXCOORD0) : SV_TARGET {
++float4 SampleScreen(float2 uv) {
+ #ifdef PIXEL_ANTIALIASING
+     return PixelAntialiasing(uv);
+ #else
+     return SampleInput((uv / gConstants.textureResolution) * gConstants.videoResolution);
+ #endif
++}
++
++// CRT look (added for 1080 Snowboarding: Recompiled). Applied on top of the full resolution
++// picture, so detail is kept: dark gaps between the TV's scanlines, and in CRT mode also a
++// slightly curved tube, an aperture grille and darker corners.
++
++float2 CurveScreen(float2 uv) {
++    float2 d = uv * 2.0f - 1.0f;
++    d *= 1.0f + float2(0.035f, 0.05f) * dot(d, d).xx;
++    return d * 0.5f + 0.5f;
++}
++
++float3 Scanlines(float3 color, float y) {
++    // Each line is a soft beam: brighter lines grow wider, as on a real tube.
++    const float lineOffset = frac(y * gConstants.crtLines) - 0.5f;
++    const float luma = dot(color, float3(0.299f, 0.587f, 0.114f));
++    const float width = lerp(0.24f, 0.42f, saturate(luma));
++    const float beam = exp(-(lineOffset * lineOffset) / (2.0f * width * width));
++    return color * lerp(0.25f, 1.0f, beam) * 1.25f;
++}
++
++float3 ApertureGrille(float3 color, float x) {
++    const int column = int(floor(x)) % 3;
++    float3 mask = float3(0.78f, 0.78f, 0.78f);
++    mask[column] = 1.0f;
++    return color * mask * 1.18f;
++}
++
++float4 PSMain(in float4 pos : SV_Position, in float2 uv : TEXCOORD0) : SV_TARGET {
++    if (gConstants.crtMode < 0.5f) {
++        return SampleScreen(uv);
++    }
++
++    float2 screenUV = uv;
++    float edge = 1.0f;
++    const bool fullCRT = (gConstants.crtMode > 1.5f);
++    if (fullCRT) {
++        screenUV = CurveScreen(uv);
++        if (any(screenUV < 0.0f) || any(screenUV > 1.0f)) {
++            return float4(0.0f, 0.0f, 0.0f, 1.0f);
++        }
++
++        // Darker corners, with a thin soft border where the tube ends.
++        const float2 fromCenter = screenUV * 2.0f - 1.0f;
++        edge = saturate(1.0f - 0.22f * dot(fromCenter, fromCenter));
++        const float2 border = saturate(min(screenUV, 1.0f - screenUV) * 120.0f);
++        edge *= border.x * border.y;
++    }
++
++    float4 color = SampleScreen(screenUV);
++    color.rgb = Scanlines(color.rgb, screenUV.y);
++    if (fullCRT) {
++        color.rgb = ApertureGrille(color.rgb, pos.x);
++    }
++
++    color.rgb = saturate(color.rgb * edge);
++    return color;
+ }
+\ No newline at end of file
+diff --git a/src/shared/rt64_video_interface.h b/src/shared/rt64_video_interface.h
+index b51cf09..ef575b0 100644
+--- a/src/shared/rt64_video_interface.h
++++ b/src/shared/rt64_video_interface.h
+@@ -13,6 +13,10 @@ namespace interop {
+         float2 videoResolution;
+         float2 textureResolution;
+         float gamma;
++        // Added for 1080 Snowboarding: Recompiled. 0 = off, 1 = scanlines, 2 = CRT.
++        float crtMode;
++        // How many TV scanlines the drawn area covers.
++        float crtLines;
+     };
+ #ifdef HLSL_CPU
+ };

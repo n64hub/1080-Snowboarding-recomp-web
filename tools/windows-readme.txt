@@ -17,6 +17,10 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.34: New CRT Filter setting (launcher main page and Settings >
+Graphics): Scanlines, or CRT for a curved TV with its fine colour stripes.
+Off by default.
+
 Changes in v0.1.33: Fixed a crash that could happen near the ice cave in Golden
 Forest, in the code that draws the ice reflection.
 

@@ -703,6 +703,7 @@ int main(int argc, char** argv) {
     ultramodern::events::callbacks_t thread_callbacks{
         .vi_callback = []() {
             recompinput::update_rumble();
+            game::update_crt_filter();
             game::achievements::frame();
         },
         .gfx_init_callback = nullptr,

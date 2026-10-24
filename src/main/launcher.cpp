@@ -387,6 +387,7 @@ void build_launcher(LauncherMenu* menu) {
         add_config_row(context, settings_view, gfx::wm_option);
         add_config_row(context, settings_view, gfx::ar_option);
         add_config_row(context, settings_view, gfx::res_option);
+        add_config_row(context, settings_view, "crt_filter");
         add_heading(context, settings_view, "Motion");
         add_frame_rate_row(context, settings_view);
         add_heading(context, settings_view, "View");
