@@ -17,6 +17,10 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.40: HD Textures now only change the snowboards (sharper
+graphics, smooth edges). Menus, text, the HUD, riders, scenery and the sky are
+back to their original N64 textures.
+
 Changes in v0.1.39: HD Textures now also cover the game's 2D art: menu
 titles and text, rider names and stat labels, the race HUD (time, speed,
 damage, place), title cards, logos and menu backgrounds are all sharper. The
