@@ -1,4 +1,5 @@
 #include "game_config.h"
+#include "game_music.h"
 
 #include <filesystem>
 #include <fstream>
@@ -58,7 +59,8 @@ void game::init_config() {
     set_control_descriptions();
     recompui::config::create_controls_tab();
 
-    recompui::config::create_sound_tab();
+    recomp::config::Config& sound_tab = recompui::config::create_sound_tab();
+    game::music::add_options(sound_tab);
 
     recompui::config::create_mods_tab();
 

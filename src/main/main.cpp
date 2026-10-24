@@ -31,6 +31,7 @@
 #endif
 
 #include "game_config.h"
+#include "game_music.h"
 #include "game_overlays.h"
 #include "recompinput/input_events.h"
 #include "recompinput/players.h"
@@ -238,6 +239,10 @@ void queue_samples(int16_t* audio_data, size_t sample_count) {
         swap_buffer[i + 1 + duplicated_input_frames * input_channels] =
             audio_data[i + 0] * (0.5f / 32768.0f) * cur_main_volume;
     }
+
+    // Mix in a custom music file, if one is replacing the current song (music.cpp).
+    game::music::mix(swap_buffer.data() + duplicated_input_frames * input_channels, sample_count / input_channels,
+                     sample_rate, 0.5f * cur_main_volume);
 
     // TODO handle cases where a chunk is smaller than the duplicated frame count.
     assert(sample_count > duplicated_input_frames * input_channels);
@@ -707,6 +712,7 @@ int main(int argc, char** argv) {
         .vi_callback = []() {
             recompinput::update_rumble();
             game::update_crt_filter();
+            game::music::frame();
             game::achievements::frame();
         },
         .gfx_init_callback = nullptr,
