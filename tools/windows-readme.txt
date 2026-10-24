@@ -17,6 +17,9 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.32: The launcher's main page has the Ice Reflection setting,
+and Frame Rate lines up with the other settings.
+
 Changes in v0.1.31: The ice reflection is tinted the grey-green of the ice
 itself. Ice Reflection Original still gives the N64 look.
 

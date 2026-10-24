@@ -124,15 +124,25 @@ void add_frame_rate_row(ContextId context, Element* parent) {
     using ultramodern::renderer::RefreshRate;
     auto& graphics = recompui::config::get_graphics_config();
 
+    // Same spacing as the config rows around it (recompui ConfigOptionEnum).
     Element* row = context.create_element<Element>(parent, 0, "div", false);
     row->set_display(Display::Flex);
     row->set_flex_direction(FlexDirection::Column);
-    row->set_padding_top(8.0f);
-    row->set_padding_bottom(8.0f);
+    row->set_align_items(AlignItems::FlexStart);
+    row->set_padding_top(12.0f);
+    row->set_padding_bottom(12.0f);
+    row->set_padding_left(12.0f);
+    row->set_padding_right(12.0f);
+    row->set_width(100.0f, Unit::Percent);
     Label* name = context.create_element<Label>(row, "Frame Rate", theme::Typography::LabelMD);
-    name->set_margin_bottom(6.0f);
+    name->set_margin_bottom(4.0f);
 
-    Radio* radio = context.create_element<Radio>(row);
+    Element* wrapper = context.create_element<Element>(row, 0, "div", false);
+    wrapper->set_display(Display::Flex);
+    wrapper->set_flex_direction(FlexDirection::Row);
+    wrapper->set_align_items(AlignItems::Center);
+    wrapper->set_width(100.0f, Unit::Percent);
+    Radio* radio = context.create_element<Radio>(wrapper);
     radio->add_option("30 (N64)");
     radio->add_option("60");
     radio->add_option("120");
@@ -147,6 +157,12 @@ void add_frame_rate_row(ContextId context, Element* parent) {
         index = 2;
     }
     radio->set_index(index);
+    radio->set_focus_callback([](bool active) {
+        if (active) {
+            show_help("Frame Rate",
+                "30 is the N64's own speed. 60 and 120 add smooth in-between frames; the game itself still runs at its normal speed.");
+        }
+    });
     radio->add_index_changed_callback([](uint32_t i) {
         auto& config = recompui::config::get_graphics_config();
         if (i == 0) {
@@ -377,6 +393,7 @@ void build_launcher(LauncherMenu* menu) {
         add_config_row(context, settings_view, "draw_distance");
         add_config_row(context, settings_view, "field_of_view");
         add_config_row(context, settings_view, "rider_shadow");
+        add_config_row(context, settings_view, "ice_reflection");
 
         achievements_view = context.create_element<Element>(panel, 0, "div", false);
         achievements_view->set_display(Display::None);
