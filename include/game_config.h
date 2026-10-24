@@ -34,6 +34,12 @@ namespace game {
     // the renderer (crt_filter.cpp). update_crt_filter runs every frame.
     void add_crt_filter_option(recomp::config::Config& graphics);
     void update_crt_filter();
+
+    // HD Textures (hd_textures.cpp): the option, copying the bundled pack into
+    // the mods folder at startup, and applying the option (every frame).
+    void add_hd_textures_option(recomp::config::Config& graphics);
+    void install_hd_textures();
+    void update_hd_textures();
 }
 
 #endif

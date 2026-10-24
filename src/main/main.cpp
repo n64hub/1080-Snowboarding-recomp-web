@@ -664,6 +664,7 @@ int main(int argc, char** argv) {
     // already selected once.
     recompui::register_launcher_update_callback([](recompui::LauncherMenu* menu) {
         game::launcher_update(menu);
+        game::update_hd_textures();
         static bool started = false;
         if (!started && std::getenv("GAME_AUTOSTART") != nullptr && recomp::is_rom_valid(supported_games[0].game_id)) {
             started = true;
@@ -707,6 +708,7 @@ int main(int argc, char** argv) {
         .vi_callback = []() {
             recompinput::update_rumble();
             game::update_crt_filter();
+            game::update_hd_textures();
             game::achievements::frame();
         },
         .gfx_init_callback = nullptr,

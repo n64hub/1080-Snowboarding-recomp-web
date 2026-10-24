@@ -54,6 +54,7 @@ void game::init_config() {
     game::add_reflection_option(graphics_tab);
     game::add_board_thickness_option(graphics_tab);
     game::add_crt_filter_option(graphics_tab);
+    game::add_hd_textures_option(graphics_tab);
 
     set_control_descriptions();
     recompui::config::create_controls_tab();
@@ -63,6 +64,8 @@ void game::init_config() {
     recompui::config::create_mods_tab();
 
     recompui::config::finalize();
+
+    game::install_hd_textures();
 
     // v0.1.5 saved Framerate = Original as its default. Move those players to
     // the new 60 fps default once; a choice made after this is kept.

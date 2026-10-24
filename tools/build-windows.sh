@@ -7,6 +7,7 @@
 # DirectX-Headers (https://github.com/microsoft/DirectX-Headers) in
 # $DIRECTX_HEADERS, wine64 (runs build-time tools), cmake and ninja.
 # Optional: LAUNCHER_LOGO=path/to/logo.png to show the logo in the launcher.
+# Optional: HD_TEXTURE_PACK=path/to/pack.rtz to bundle the HD texture pack.
 # Output: build/win/package/1080SnowboardingRecompiled (zip it to share).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -38,6 +39,12 @@ cp -r assets "$PKG/"
 # The launcher shows the 1080 logo if it is packaged; it is not in the repository.
 if [ -n "${LAUNCHER_LOGO:-}" ] && [ -f "$LAUNCHER_LOGO" ]; then
     cp "$LAUNCHER_LOGO" "$PKG/assets/launcher/logo.png"
+fi
+# The HD texture pack (Settings > Graphics > HD Textures) if one is given. It is
+# made from the game's textures, so it is not in the repository either.
+if [ -n "${HD_TEXTURE_PACK:-}" ] && [ -f "$HD_TEXTURE_PACK" ]; then
+    mkdir -p "$PKG/textures"
+    cp "$HD_TEXTURE_PACK" "$PKG/textures/1080-hd-textures.rtz"
 fi
 VERSION=$(sed -n 's/^GAME_VERSION:STRING=//p' CMakeCache.txt)
 sed "1s/(early)/(v$VERSION, early)/" "$ROOT/tools/windows-readme.txt" > "$PKG/README.txt"
