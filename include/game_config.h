@@ -27,6 +27,9 @@ namespace game {
     // Adds the Field of View option to the graphics tab (camera.cpp).
     void add_fov_option(recomp::config::Config& graphics);
 
+    // Adds the Board Thickness option to the graphics tab (boards.cpp).
+    void add_board_thickness_option(recomp::config::Config& graphics);
+
     // Adds the CRT Filter option to the graphics tab, and passes the choice to
     // the renderer (crt_filter.cpp). update_crt_filter runs every frame.
     void add_crt_filter_option(recomp::config::Config& graphics);

@@ -14,6 +14,7 @@
 // (see kernel_hooks in tools/gen_recomp.py), which is how the kernel enters
 // module code.
 
+#include <cstring>
 #include <cstdint>
 #include <cstdio>
 
@@ -204,4 +205,20 @@ extern "C" void game_sync_modules(uint8_t* rdram) {
             loaded[s] = now[s];
         }
     }
+}
+
+// True while the named module (for example "charsel.uso") has any section loaded.
+extern "C" bool game_module_loaded(const char* name) {
+    for (const ModuleInfo& mod : modules) {
+        if (std::strcmp(mod.name, name) == 0) {
+            const uint32_t* loaded = loaded_addresses[mod.file_index];
+            for (int s = 0; s < SECTION_COUNT; s++) {
+                if (loaded[s] != 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+    return false;
 }

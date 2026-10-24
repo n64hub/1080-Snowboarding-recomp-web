@@ -395,6 +395,7 @@ void build_launcher(LauncherMenu* menu) {
         add_config_row(context, settings_view, "field_of_view");
         add_config_row(context, settings_view, "rider_shadow");
         add_config_row(context, settings_view, "ice_reflection");
+        add_config_row(context, settings_view, "board_thickness");
 
         achievements_view = context.create_element<Element>(panel, 0, "div", false);
         achievements_view->set_display(Display::None);

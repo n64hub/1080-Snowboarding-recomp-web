@@ -52,6 +52,7 @@ void game::init_config() {
     game::add_fov_option(graphics_tab);
     game::add_shadow_option(graphics_tab);
     game::add_reflection_option(graphics_tab);
+    game::add_board_thickness_option(graphics_tab);
     game::add_crt_filter_option(graphics_tab);
 
     set_control_descriptions();

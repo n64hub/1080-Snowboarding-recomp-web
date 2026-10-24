@@ -17,6 +17,10 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.35: New Board Thickness setting (launcher main page and
+Settings > Graphics). Thick, the default, gives the boards on the board select
+screen a solid dark edge instead of a paper-thin one. Original keeps the N64 look.
+
 Changes in v0.1.34: New CRT Filter setting (launcher main page and Settings >
 Graphics): Scanlines, or CRT for a curved TV with its fine colour stripes.
 Off by default.

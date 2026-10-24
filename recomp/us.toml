@@ -189,3 +189,12 @@ text = "    { void game_trail_render_mode(uint8_t*, recomp_context*); game_trail
 func = "bootup_00CFA0"
 before_vram = 0x8100CFAC
 text = "    { void game_rider_draw_start(uint8_t*, recomp_context*); game_rider_draw_start(rdram, ctx); }"
+
+# Board Thickness (src/game/boards.cpp): bootup_05CA28 writes one batch of a
+# model (a vertex load, then its triangles) into a display list. On the way out,
+# board cards on the board select screen get an edge.
+[[patches.hook]]
+func = "bootup_05CA28"
+before_vram = 0x8105CB60
+text = "    { void game_board_batch_end(uint8_t*, recomp_context*); game_board_batch_end(rdram, ctx); }"
+
