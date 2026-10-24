@@ -3,13 +3,15 @@
 <p align="center">A native PC port of the 1998 N64 snowboarding game 1080° Snowboarding, built with static recompilation, with widescreen, 60 and 120 fps, longer draw distance, HD boards and more, all optional.</p>
 
 <p align="center">
-  <a href="https://github.com/thebradshaw/1080-snowboarding-decomp/releases/latest/download/1080SnowboardingRecompiled-windows-x64.zip"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-Windows%20(x64)-2a6fe8?style=for-the-badge&logo=windows&logoColor=white" height="44"></a>
+  <a href="https://github.com/thebradshaw/1080-Snowboarding-decomp/releases/latest/download/1080SnowboardingRecompiled-windows-x64.zip"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-Windows%20(x64)-2a6fe8?style=for-the-badge&logo=windows&logoColor=white" height="44"></a>
+  &nbsp;
+  <a href="https://github.com/thebradshaw/1080-Snowboarding-decomp/releases/latest/download/1080SnowboardingRecompiled-linux-x64.tar.gz"><img alt="Download for Linux (experimental)" src="https://img.shields.io/badge/Download-Linux%20(experimental)-555555?style=for-the-badge&logo=linux&logoColor=white" height="44"></a>
 </p>
-<p align="center"><a href="https://github.com/thebradshaw/1080-snowboarding-decomp/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/thebradshaw/1080-snowboarding-decomp?label=latest%20release&style=flat-square"></a></p>
+<p align="center"><a href="https://github.com/thebradshaw/1080-Snowboarding-decomp/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/thebradshaw/1080-Snowboarding-decomp?label=latest%20release&style=flat-square"></a></p>
 
 <p align="center"><img alt="Crystal Lake in widescreen" src="docs/screenshots/crystal-lake.jpg" width="820"></p>
 
-**To play:** download, unzip, run `1080SnowboardingRecompiled.exe`, choose **Load ROM** and pick your 1080° Snowboarding (USA) ROM, set the options and choose **Start Game**.
+**To play:** download, unzip, run `1080SnowboardingRecompiled.exe` (on Linux, `1080SnowboardingRecompiled.sh`), choose **Load ROM** and pick your 1080° Snowboarding (USA) ROM, set the options and choose **Start Game**.
 
 **You need your own ROM.** The ROM isn't in this repository or its downloads. The game's code is recompiled to C here and runs only alongside an unmodified 1080° Snowboarding (USA) ROM in `.z64` format:
 
@@ -17,7 +19,7 @@
 
 A fan project, not affiliated with or endorsed by Nintendo. 1080° Snowboarding is a trademark of Nintendo.
 
-The download above is always the latest release; older ones are on the [releases page](../../releases). Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan or Direct3D 12.
+The downloads above are always the latest release; older ones are on the [releases page](../../releases). Windows needs Windows 10 or 11 (64-bit) and a GPU with Vulkan or Direct3D 12. The Linux build is new and untested on real machines, so it may not be stable; it needs a distribution about as new as Ubuntu 24.04, Vulkan drivers, SDL2 and GTK 3.
 
 | | |
 |---|---|
@@ -47,7 +49,7 @@ Every enhancement can be turned off to get the N64 look back. All of them are on
 
 Keyboard, mouse and gamepads all work, and controls can be remapped in Controls. The Mods menu loads RT64 texture packs and code mods, and Achievements signs in to RetroAchievements.
 
-Settings, controls and saves live in `%LOCALAPPDATA%\1080SnowboardingRecompiled`. To keep everything next to the exe instead, create an empty file named `portable.txt` there. Each run writes `log.txt` to the same folder; send it along when you report a problem.
+Settings, controls and saves live in `%LOCALAPPDATA%\1080SnowboardingRecompiled` (on Linux, `~/.config/1080SnowboardingRecompiled`). To keep everything next to the exe instead, create an empty file named `portable.txt` there. Each run writes `log.txt` to the same folder; send it along when you report a problem.
 
 ## Building
 
@@ -65,7 +67,7 @@ ROM into `build/recomp-input/`, and writes the recompiled game to
 builds the game with [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime),
 [RT64](https://github.com/rt64/rt64) and RecompFrontend.
 
-On first launch the game asks for your ROM.
+On first launch the game asks for your ROM. `tools/package-linux.sh` turns `build/pc` into a ready-to-tar folder in `build/linux-package/`.
 
 ### Windows (cross-compiled from Linux)
 
