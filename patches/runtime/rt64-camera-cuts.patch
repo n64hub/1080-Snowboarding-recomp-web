@@ -1,3 +1,42 @@
+diff --git a/include/rt64_extended_gbi.h b/include/rt64_extended_gbi.h
+index 6f3db15..1471661 100644
+--- a/include/rt64_extended_gbi.h
++++ b/include/rt64_extended_gbi.h
+@@ -81,7 +81,9 @@
+ #define G_EX_SETTEXCOORDWRAPPOINT_V1    0x000032
+ #define G_EX_SETRECTASPECT_V1           0x000033
+ #define G_EX_SETSCISSORASPECT_V1        0x000034
+-#define G_EX_MAX                        0x000035
++// Added for 1080 Snowboarding: Recompiled (see remapProjectionDepth in rt64_rsp.cpp).
++#define G_EX_REMAPPROJDEPTH_V1          0x000035
++#define G_EX_MAX                        0x000036
+ 
+ #define G_EX_ORIGIN_NONE            0x800
+ #define G_EX_ORIGIN_LEFT            0x0
+diff --git a/src/gbi/rt64_gbi_extended.cpp b/src/gbi/rt64_gbi_extended.cpp
+index af126e5..c59bf9f 100644
+--- a/src/gbi/rt64_gbi_extended.cpp
++++ b/src/gbi/rt64_gbi_extended.cpp
+@@ -307,6 +307,11 @@ namespace RT64 {
+             state->rsp->setNoN(!nearClipping);
+         }
+ 
++        void remapProjectionDepthV1(State *state, DisplayList **dl) {
++            *dl = *dl + 1;
++            state->rsp->remapProjectionDepth((*dl)->w1);
++        }
++
+         void matrixFloatV1(State *state, DisplayList **dl) {
+             uint8_t params = (*dl)->p1(0, 8) ^ state->rsp->pushMask;
+             *dl = *dl + 1;
+@@ -441,6 +446,7 @@ namespace RT64 {
+             Map[G_EX_SETVIEWMATRIXFLOAT_V1] = &setViewMatrixFloatV1;
+             Map[G_EX_SETNEARCLIPPING_V1] = &setNearClippingV1;
+             Map[G_EX_MATRIX_FLOAT_V1] = &matrixFloatV1;
++            Map[G_EX_REMAPPROJDEPTH_V1] = &remapProjectionDepthV1;
+             Map[G_EX_SETVERTEXSEGMENT_V1] = &setVertexSegmentV1;
+             Map[G_EX_SETTEXCOORDWRAPPOINT_V1] = &setTexcoordWrapPointV1;
+             Map[G_EX_SETRECTASPECT_V1] = &setRectAspectV1;
 diff --git a/src/hle/rt64_game_frame.cpp b/src/hle/rt64_game_frame.cpp
 index 87392d0..3db896f 100644
 --- a/src/hle/rt64_game_frame.cpp
@@ -152,6 +191,118 @@ index dccaa87..2aa5bbb 100644
  
          // Run the command interpreter.
          DisplayList *dl = dlStart;
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index 1da2550..8b4a0e9 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -207,6 +207,95 @@ namespace RT64 {
+         matrixCommon(floatMatrix, address, params);
+     }
+ 
++    void RSP::remapProjectionDepth(uint32_t address) {
++        // Moves what is drawn next onto a thin layer in front of a world plane, in depth only: clip z
++        // becomes squeeze * z + (1 - squeeze) * (the plane's z at that point of the screen) - layer * w.
++        // Nothing moves on screen and depth order is kept. The parameters are six floats: the plane
++        // (n.x = d as nx, ny, nz, d), then layer and squeeze. The game uses it to draw a reflection that
++        // lies below the ice as if on it, with its own depth test.
++        const uint32_t rdramAddress = fromSegmentedMasked(address);
++        const float *params = reinterpret_cast<const float *>(state->fromRDRAM(rdramAddress));
++        const double plane[4] = { params[0], params[1], params[2], -double(params[3]) };
++        const double layer = params[4];
++        const double squeeze = params[5];
++
++        if ((projectionMatrixStackSize < 1) || (projectionMatrixStackSize > RSP_EXTENDED_STACK_SIZE)) {
++            return;
++        }
++
++        // Work on aligned local copies: reading the stack entries in place let the compiler emit
++        // aligned SSE loads that faulted on the Golden Forest ice cave.
++        const int stackIndex = projectionMatrixStackSize - 1;
++        hlslpp::float4x4 viewProjMatrix;
++        hlslpp::float4x4 projMatrix;
++        memcpy(&viewProjMatrix, &viewProjMatrixStack[stackIndex], sizeof(hlslpp::float4x4));
++        memcpy(&projMatrix, &projMatrixStack[stackIndex], sizeof(hlslpp::float4x4));
++        double vp[4][4];
++        for (int r = 0; r < 4; r++) {
++            for (int c = 0; c < 4; c++) {
++                vp[r][c] = viewProjMatrix[r][c];
++            }
++        }
++
++        // The plane in clip space: clip = world * vp, so world = clip * inverse(vp) and the plane is
++        // clip . q = 0 with q = inverse(vp) * plane. Solve vp * q = plane instead of inverting.
++        double a[4][5];
++        for (int r = 0; r < 4; r++) {
++            for (int c = 0; c < 4; c++) {
++                a[r][c] = vp[r][c];
++            }
++            a[r][4] = plane[r];
++        }
++        for (int col = 0; col < 4; col++) {
++            int pivot = col;
++            for (int r = col + 1; r < 4; r++) {
++                if (std::abs(a[r][col]) > std::abs(a[pivot][col])) {
++                    pivot = r;
++                }
++            }
++            if (std::abs(a[pivot][col]) < 1e-30) {
++                return;
++            }
++            for (int c = 0; c < 5; c++) {
++                std::swap(a[col][c], a[pivot][c]);
++            }
++            for (int r = 0; r < 4; r++) {
++                if (r != col) {
++                    const double f = a[r][col] / a[col][col];
++                    for (int c = col; c < 5; c++) {
++                        a[r][c] -= f * a[col][c];
++                    }
++                }
++            }
++        }
++        double q[4];
++        for (int i = 0; i < 4; i++) {
++            q[i] = a[i][4] / a[i][i];
++        }
++        if (std::abs(q[2]) < 1e-30) {
++            return;
++        }
++
++        // Column 2 of the remap: z' = sum(c[k] * column[k]).
++        double column[4] = { -(1.0 - squeeze) * q[0] / q[2], -(1.0 - squeeze) * q[1] / q[2], squeeze, -(1.0 - squeeze) * q[3] / q[2] - layer };
++        auto remap = [&](hlslpp::float4x4 &m) {
++            for (int r = 0; r < 4; r++) {
++                double z = 0.0;
++                for (int k = 0; k < 4; k++) {
++                    z += double(m[r][k]) * column[k];
++                }
++                m[r][2] = float(z);
++            }
++        };
++        remap(viewProjMatrix);
++        remap(projMatrix);
++        memcpy(&viewProjMatrixStack[stackIndex], &viewProjMatrix, sizeof(hlslpp::float4x4));
++        memcpy(&projMatrixStack[stackIndex], &projMatrix, sizeof(hlslpp::float4x4));
++        projectionMatrixChanged = true;
++        projectionMatrixInversed = false;
++        modelViewProjChanged = true;
++    }
++
+     void RSP::popMatrix(uint32_t count) {
+         while (count--) {
+             if (modelMatrixStackSize > 1) {
+diff --git a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
+index 61bb3b1..bf80c56 100644
+--- a/src/hle/rt64_rsp.h
++++ b/src/hle/rt64_rsp.h
+@@ -241,6 +241,7 @@ namespace RT64 {
+         void matrixCommon(const hlslpp::float4x4 &floatMatrix, uint32_t address, uint8_t params);
+         void matrix(uint32_t address, uint8_t params);
+         void matrixFloat(uint32_t address, uint8_t params);
++        void remapProjectionDepth(uint32_t address);
+         void popMatrix(uint32_t count);
+         void pushProjectionMatrix();
+         void popProjectionMatrix();
 diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 index 00ebbf0..694b642 100644
 --- a/src/hle/rt64_state.cpp
@@ -275,193 +426,6 @@ index 89f2425..5c83dbe 100644
                      matchingProfiler.end();
                      matchingProfiler.log();
  
-diff --git a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projection_processor.cpp
-index e842dcc..44e1c23 100644
---- a/src/render/rt64_projection_processor.cpp
-+++ b/src/render/rt64_projection_processor.cpp
-@@ -1,3 +1,4 @@
-+#include <cmath>
- //
- // RT64
- //
-@@ -144,6 +145,23 @@ namespace RT64 {
- 
-             interop::float4x4 &prevViewProjTransform = drawData.prevViewProjTransforms[proj.transformsIndex];
-             prevViewProjTransform = hlslpp::mul(prevViewTransform, prevProjTransform);
-+
-+            // Rebuilding the view-projection from its decomposed view and projection loses precision in the depth
-+            // terms (the decomposition divides by a single, sometimes tiny, element). Depth near the far plane and
-+            // the fog computed from it then jumped between frames, so distant hills flickered in and out of the fog.
-+            // Instead, apply only the camera's movement to the game's own matrix, which keeps depth and fog exact.
-+            if ((proj.type == Projection::Type::Perspective) && !workload.debuggerCamera.enabled) {
-+                interop::float4x4 gameViewProj = drawData.viewProjTransforms[proj.transformsIndex];
-+                adjustProjectionMatrix(gameViewProj, projRatioScale);
-+                const hlslpp::float4x4 gameView = drawData.viewTransforms[proj.transformsIndex];
-+                const float viewDet = hlslpp::determinant(extract3x3(gameView));
-+                if (std::isfinite(viewDet) && (fabsf(viewDet) > 1e-6f)) {
-+                    const hlslpp::float4x4 gameViewInverse = hlslpp::inverse(gameView);
-+                    viewProjMatrix = hlslpp::mul(hlslpp::mul(viewMatrix, gameViewInverse), gameViewProj);
-+                    prevViewProjTransform = hlslpp::mul(hlslpp::mul(prevViewTransform, gameViewInverse), gameViewProj);
-+                }
-+            }
-+
-         }
-     }
- 
-diff --git a/src/render/rt64_transform_processor.cpp b/src/render/rt64_transform_processor.cpp
-index cd8004d..d5e208f 100644
---- a/src/render/rt64_transform_processor.cpp
-+++ b/src/render/rt64_transform_processor.cpp
-@@ -74,7 +74,8 @@ namespace RT64 {
-         uploads.clear();
- 
-         for (uint32_t w : p.curFrame->workloads) {
--            const bool prevFrameValid = (p.prevFrame != nullptr);
-+            // Only workloads matched against the previous frame filled the interpolated lists.
-+            const bool prevFrameValid = (p.prevFrame != nullptr) && p.curFrame->frameMap.workloads[w].mapped;
-             Workload &workload = p.workloadQueue->workloads[w];
-             const DrawData &drawData = workload.drawData;
-             DrawBuffers &drawBuffers = workload.drawBuffers;
-diff --git a/include/rt64_extended_gbi.h b/include/rt64_extended_gbi.h
-index 6f3db15..1471661 100644
---- a/include/rt64_extended_gbi.h
-+++ b/include/rt64_extended_gbi.h
-@@ -81,7 +81,9 @@
- #define G_EX_SETTEXCOORDWRAPPOINT_V1    0x000032
- #define G_EX_SETRECTASPECT_V1           0x000033
- #define G_EX_SETSCISSORASPECT_V1        0x000034
--#define G_EX_MAX                        0x000035
-+// Added for 1080 Snowboarding: Recompiled (see remapProjectionDepth in rt64_rsp.cpp).
-+#define G_EX_REMAPPROJDEPTH_V1          0x000035
-+#define G_EX_MAX                        0x000036
- 
- #define G_EX_ORIGIN_NONE            0x800
- #define G_EX_ORIGIN_LEFT            0x0
-diff --git a/src/gbi/rt64_gbi_extended.cpp b/src/gbi/rt64_gbi_extended.cpp
-index af126e5..c59bf9f 100644
---- a/src/gbi/rt64_gbi_extended.cpp
-+++ b/src/gbi/rt64_gbi_extended.cpp
-@@ -307,6 +307,11 @@ namespace RT64 {
-             state->rsp->setNoN(!nearClipping);
-         }
- 
-+        void remapProjectionDepthV1(State *state, DisplayList **dl) {
-+            *dl = *dl + 1;
-+            state->rsp->remapProjectionDepth((*dl)->w1);
-+        }
-+
-         void matrixFloatV1(State *state, DisplayList **dl) {
-             uint8_t params = (*dl)->p1(0, 8) ^ state->rsp->pushMask;
-             *dl = *dl + 1;
-@@ -441,6 +446,7 @@ namespace RT64 {
-             Map[G_EX_SETVIEWMATRIXFLOAT_V1] = &setViewMatrixFloatV1;
-             Map[G_EX_SETNEARCLIPPING_V1] = &setNearClippingV1;
-             Map[G_EX_MATRIX_FLOAT_V1] = &matrixFloatV1;
-+            Map[G_EX_REMAPPROJDEPTH_V1] = &remapProjectionDepthV1;
-             Map[G_EX_SETVERTEXSEGMENT_V1] = &setVertexSegmentV1;
-             Map[G_EX_SETTEXCOORDWRAPPOINT_V1] = &setTexcoordWrapPointV1;
-             Map[G_EX_SETRECTASPECT_V1] = &setRectAspectV1;
-diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
-index 1da2550..5b5842c 100644
---- a/src/hle/rt64_rsp.cpp
-+++ b/src/hle/rt64_rsp.cpp
-@@ -207,6 +207,84 @@ namespace RT64 {
-         matrixCommon(floatMatrix, address, params);
-     }
- 
-+    void RSP::remapProjectionDepth(uint32_t address) {
-+        // Moves what is drawn next onto a thin layer in front of a world plane, in depth only: clip z
-+        // becomes squeeze * z + (1 - squeeze) * (the plane's z at that point of the screen) - layer * w.
-+        // Nothing moves on screen and depth order is kept. The parameters are six floats: the plane
-+        // (n.x = d as nx, ny, nz, d), then layer and squeeze. The game uses it to draw a reflection that
-+        // lies below the ice as if on it, with its own depth test.
-+        const uint32_t rdramAddress = fromSegmentedMasked(address);
-+        const float *params = reinterpret_cast<const float *>(state->fromRDRAM(rdramAddress));
-+        const double plane[4] = { params[0], params[1], params[2], -double(params[3]) };
-+        const double layer = params[4];
-+        const double squeeze = params[5];
-+
-+        hlslpp::float4x4 &viewProjMatrix = viewProjMatrixStack[projectionMatrixStackSize - 1];
-+        hlslpp::float4x4 &projMatrix = projMatrixStack[projectionMatrixStackSize - 1];
-+        double vp[4][4];
-+        for (int r = 0; r < 4; r++) {
-+            for (int c = 0; c < 4; c++) {
-+                vp[r][c] = viewProjMatrix[r][c];
-+            }
-+        }
-+
-+        // The plane in clip space: clip = world * vp, so world = clip * inverse(vp) and the plane is
-+        // clip . q = 0 with q = inverse(vp) * plane. Solve vp * q = plane instead of inverting.
-+        double a[4][5];
-+        for (int r = 0; r < 4; r++) {
-+            for (int c = 0; c < 4; c++) {
-+                a[r][c] = vp[r][c];
-+            }
-+            a[r][4] = plane[r];
-+        }
-+        for (int col = 0; col < 4; col++) {
-+            int pivot = col;
-+            for (int r = col + 1; r < 4; r++) {
-+                if (std::abs(a[r][col]) > std::abs(a[pivot][col])) {
-+                    pivot = r;
-+                }
-+            }
-+            if (std::abs(a[pivot][col]) < 1e-30) {
-+                return;
-+            }
-+            for (int c = 0; c < 5; c++) {
-+                std::swap(a[col][c], a[pivot][c]);
-+            }
-+            for (int r = 0; r < 4; r++) {
-+                if (r != col) {
-+                    const double f = a[r][col] / a[col][col];
-+                    for (int c = col; c < 5; c++) {
-+                        a[r][c] -= f * a[col][c];
-+                    }
-+                }
-+            }
-+        }
-+        double q[4];
-+        for (int i = 0; i < 4; i++) {
-+            q[i] = a[i][4] / a[i][i];
-+        }
-+        if (std::abs(q[2]) < 1e-30) {
-+            return;
-+        }
-+
-+        // Column 2 of the remap: z' = sum(c[k] * column[k]).
-+        double column[4] = { -(1.0 - squeeze) * q[0] / q[2], -(1.0 - squeeze) * q[1] / q[2], squeeze, -(1.0 - squeeze) * q[3] / q[2] - layer };
-+        auto remap = [&](hlslpp::float4x4 &m) {
-+            for (int r = 0; r < 4; r++) {
-+                double z = 0.0;
-+                for (int k = 0; k < 4; k++) {
-+                    z += double(m[r][k]) * column[k];
-+                }
-+                m[r][2] = float(z);
-+            }
-+        };
-+        remap(viewProjMatrix);
-+        remap(projMatrix);
-+        projectionMatrixChanged = true;
-+        projectionMatrixInversed = false;
-+        modelViewProjChanged = true;
-+    }
-+
-     void RSP::popMatrix(uint32_t count) {
-         while (count--) {
-             if (modelMatrixStackSize > 1) {
-diff --git a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
-index 61bb3b1..bf80c56 100644
---- a/src/hle/rt64_rsp.h
-+++ b/src/hle/rt64_rsp.h
-@@ -241,6 +241,7 @@ namespace RT64 {
-         void matrixCommon(const hlslpp::float4x4 &floatMatrix, uint32_t address, uint8_t params);
-         void matrix(uint32_t address, uint8_t params);
-         void matrixFloat(uint32_t address, uint8_t params);
-+        void remapProjectionDepth(uint32_t address);
-         void popMatrix(uint32_t count);
-         void pushProjectionMatrix();
-         void popProjectionMatrix();
 diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
 index 31338ef..3552691 100644
 --- a/src/render/rt64_framebuffer_renderer.cpp
@@ -586,3 +550,50 @@ index 3add9c3..ed9871d 100644
          };
  
          std::vector<Framebuffer> framebufferVector;
+diff --git a/src/render/rt64_projection_processor.cpp b/src/render/rt64_projection_processor.cpp
+index e842dcc..44e1c23 100644
+--- a/src/render/rt64_projection_processor.cpp
++++ b/src/render/rt64_projection_processor.cpp
+@@ -1,3 +1,4 @@
++#include <cmath>
+ //
+ // RT64
+ //
+@@ -144,6 +145,23 @@ namespace RT64 {
+ 
+             interop::float4x4 &prevViewProjTransform = drawData.prevViewProjTransforms[proj.transformsIndex];
+             prevViewProjTransform = hlslpp::mul(prevViewTransform, prevProjTransform);
++
++            // Rebuilding the view-projection from its decomposed view and projection loses precision in the depth
++            // terms (the decomposition divides by a single, sometimes tiny, element). Depth near the far plane and
++            // the fog computed from it then jumped between frames, so distant hills flickered in and out of the fog.
++            // Instead, apply only the camera's movement to the game's own matrix, which keeps depth and fog exact.
++            if ((proj.type == Projection::Type::Perspective) && !workload.debuggerCamera.enabled) {
++                interop::float4x4 gameViewProj = drawData.viewProjTransforms[proj.transformsIndex];
++                adjustProjectionMatrix(gameViewProj, projRatioScale);
++                const hlslpp::float4x4 gameView = drawData.viewTransforms[proj.transformsIndex];
++                const float viewDet = hlslpp::determinant(extract3x3(gameView));
++                if (std::isfinite(viewDet) && (fabsf(viewDet) > 1e-6f)) {
++                    const hlslpp::float4x4 gameViewInverse = hlslpp::inverse(gameView);
++                    viewProjMatrix = hlslpp::mul(hlslpp::mul(viewMatrix, gameViewInverse), gameViewProj);
++                    prevViewProjTransform = hlslpp::mul(hlslpp::mul(prevViewTransform, gameViewInverse), gameViewProj);
++                }
++            }
++
+         }
+     }
+ 
+diff --git a/src/render/rt64_transform_processor.cpp b/src/render/rt64_transform_processor.cpp
+index cd8004d..d5e208f 100644
+--- a/src/render/rt64_transform_processor.cpp
++++ b/src/render/rt64_transform_processor.cpp
+@@ -74,7 +74,8 @@ namespace RT64 {
+         uploads.clear();
+ 
+         for (uint32_t w : p.curFrame->workloads) {
+-            const bool prevFrameValid = (p.prevFrame != nullptr);
++            // Only workloads matched against the previous frame filled the interpolated lists.
++            const bool prevFrameValid = (p.prevFrame != nullptr) && p.curFrame->frameMap.workloads[w].mapped;
+             Workload &workload = p.workloadQueue->workloads[w];
+             const DrawData &drawData = workload.drawData;
+             DrawBuffers &drawBuffers = workload.drawBuffers;
