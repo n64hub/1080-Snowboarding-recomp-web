@@ -1,4 +1,4 @@
-1080 Snowboarding: Recompiled - Windows test build (early)
+1080 Snowboarding: Recompiled 1.0 for Windows
 
 1. Unzip this folder anywhere (use a new folder, not over an older version).
 2. Run 1080SnowboardingRecompiled.exe.
@@ -11,11 +11,14 @@ To keep everything next to the exe instead, create an empty file named portable.
 
 Reporting a problem: each run writes log.txt to that same folder
 (%LOCALAPPDATA%\1080SnowboardingRecompiled\log.txt). Send that file after the
-problem happens. 1080SnowboardingRecompiled-log.exe shows the same log live in a
-console window instead.
+problem happens.
 
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
+
+Changes in 1.0: First public release (the same game as v0.1.40). The HD
+Textures option is now called HD Board Textures, and the separate -log.exe is
+gone: log.txt (above) has the same information.
 
 Changes in v0.1.40: HD Textures now only change the snowboards (sharper
 graphics, smooth edges). Menus, text, the HUD, riders, scenery and the sky are

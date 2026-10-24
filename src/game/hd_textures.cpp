@@ -4,7 +4,7 @@
 // pack itself is made from the game's own textures, so it is never part of
 // this repository; tools/build-windows.sh copies it in when HD_TEXTURE_PACK is
 // set. At startup the pack is copied into the mods folder (where the mod
-// system finds it), and the HD Textures option enables or disables it. Without
+// system finds it), and the HD Board Textures option enables or disables it. Without
 // a bundled pack the option does nothing.
 
 #include <cstdint>
@@ -46,7 +46,7 @@ namespace game {
 void add_hd_textures_option(recomp::config::Config& graphics) {
     graphics.add_enum_option(
         option_id,
-        "HD Textures",
+        "HD Board Textures",
         "Sharper, 4x upscaled snowboard graphics with smooth edges. "
         "Everything else keeps its original look. "
         "<recomp-color primary>Off</recomp-color> shows the original N64 boards.",

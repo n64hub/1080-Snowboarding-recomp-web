@@ -49,14 +49,4 @@ fi
 VERSION=$(sed -n 's/^GAME_VERSION:STRING=//p' CMakeCache.txt)
 sed "1s/(early)/(v$VERSION, early)/" "$ROOT/tools/windows-readme.txt" > "$PKG/README.txt"
 "$LLVM_MINGW/bin/llvm-strip" "$PKG/1080SnowboardingRecompiled.exe"
-# Same program with a console window that shows the log, for troubleshooting.
-python3 - "$PKG/1080SnowboardingRecompiled.exe" "$PKG/1080SnowboardingRecompiled-log.exe" <<'PY'
-import struct, sys
-data = bytearray(open(sys.argv[1], "rb").read())
-pe = struct.unpack_from("<I", data, 0x3C)[0]
-subsystem = pe + 24 + 68  # PE signature + COFF header, then optional header field
-assert struct.unpack_from("<H", data, subsystem)[0] == 2  # GUI
-struct.pack_into("<H", data, subsystem, 3)  # console
-open(sys.argv[2], "wb").write(data)
-PY
 echo "Packaged to $PKG"

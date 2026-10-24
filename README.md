@@ -1,27 +1,53 @@
-# 1080° Snowboarding PC port
+<h1 align="center">1080° Snowboarding: Recompiled</h1>
 
-A native Windows port of *1080° Snowboarding* (N64, 1998) built with static
-recompilation, aiming for widescreen, high frame rates, longer draw distance,
-adjustable field of view, an HD texture pack, CRT filters and other optional
-enhancements, all toggleable.
+<p align="center">A native PC port of the 1998 N64 snowboarding game 1080° Snowboarding, built with static recompilation, with widescreen, 60 and 120 fps, longer draw distance, HD boards and more, all optional.</p>
 
-**No game data is included.** You need your own ROM of the USA release
-(`md5 fa27089c425dbab99f19245c5c997613`).
+<p align="center">
+  <a href="https://github.com/thebradshaw/1080-snowboarding-decomp/releases/latest/download/1080SnowboardingRecompiled-windows-x64.zip"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-Windows%20(x64)-2a6fe8?style=for-the-badge&logo=windows&logoColor=white" height="44"></a>
+</p>
+<p align="center"><a href="https://github.com/thebradshaw/1080-snowboarding-decomp/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/thebradshaw/1080-snowboarding-decomp?label=latest%20release&style=flat-square"></a></p>
 
-## Status
+<p align="center"><img alt="Crystal Lake in widescreen" src="docs/screenshots/crystal-lake.jpg" width="820"></p>
 
-Early work in progress.
+**To play:** download, unzip, run `1080SnowboardingRecompiled.exe`, choose **Load ROM** and pick your 1080° Snowboarding (USA) ROM, set the options and choose **Start Game**.
 
-- [x] Decode the game's USO code modules, symbol tables and relocations ([docs/USO_FORMAT.md](docs/USO_FORMAT.md))
-- [x] Recompile the whole game to C with N64Recomp (3,421 functions)
-- [x] Identify the game's libultra 2.0I functions (213 named) and its RSP microcode (F3DEX 1.23 family + audio)
-- [x] Recompile the audio microcode with RSPRecomp
-- [x] Runtime: N64ModernRuntime + RT64 + RecompFrontend menus, synced with the game's module loader
-- [x] First boot: intro, title screen and attract demo run (Linux)
-- [x] Windows builds (cross-compiled from Linux with llvm-mingw, see below)
-- [ ] Enhancements: widescreen, 60 and 120 fps modes, draw distance, FOV, settings menu
-- [ ] HD texture pack, CRT filters
-- [ ] Bonus: 3D board models on board select, audio investigation
+**You need your own ROM.** The ROM isn't in this repository or its downloads. The game's code is recompiled to C here and runs only alongside an unmodified 1080° Snowboarding (USA) ROM in `.z64` format:
+
+- MD5 `fa27089c425dbab99f19245c5c997613`
+
+A fan project, not affiliated with or endorsed by Nintendo. 1080° Snowboarding is a trademark of Nintendo.
+
+The download above is always the latest release; older ones are on the [releases page](../../releases). Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan or Direct3D 12.
+
+| | |
+|---|---|
+| ![The title screen in widescreen](docs/screenshots/title.jpg) | ![The launcher: options on the right, Start Game on the left](docs/screenshots/launcher.png) |
+| The title screen | The launcher |
+| ![The helicopter over Crystal Lake](docs/screenshots/helicopter.jpg) | ![Riding past the banners](docs/screenshots/stadium.jpg) |
+| The helicopter | By the banners |
+
+![Racing at dusk](docs/screenshots/dusk.jpg)
+
+## Options
+
+Every enhancement can be turned off to get the N64 look back. All of them are on the launcher's main page and in Settings > Graphics.
+
+| Option | What it does |
+|---|---|
+| Aspect Ratio | **Expand** draws the game as wide as your window (widescreen); **Original** keeps 4:3 |
+| Resolution | Up to your display's resolution, with MSAA |
+| Frame Rate | **60** (the default), **120**, or **30** like the N64 |
+| Draw Distance | **Original**, **Extended** (about three times as far) or **Maximum** (the whole course at once, the default) |
+| Field of View | 100% matches the N64; higher shows more of the course |
+| HD Board Textures | Sharper, 4x upscaled snowboard graphics with smooth edges (on by default) |
+| Board Thickness | **Thick** gives the boards on the board select screen a solid edge; **Original** keeps them paper thin |
+| Rider Shadow | **Original** casts it along the sun; **Under Rider** keeps it under the rider |
+| Ice Reflection | **Solid** draws the rider's reflection as one see-through figure; **Original** keeps the N64's patchy look |
+| CRT Filter | **Scanlines** or a full **CRT** look (off by default) |
+
+Keyboard, mouse and gamepads all work, and controls can be remapped in Controls. The Mods menu loads RT64 texture packs and code mods, and Achievements signs in to RetroAchievements.
+
+Settings, controls and saves live in `%LOCALAPPDATA%\1080SnowboardingRecompiled`. To keep everything next to the exe instead, create an empty file named `portable.txt` there. Each run writes `log.txt` to the same folder; send it along when you report a problem.
 
 ## Building
 
@@ -51,7 +77,17 @@ LLVM_MINGW=/opt/llvm-mingw DIRECTX_HEADERS=/opt/DirectX-Headers tools/build-wind
 ```
 
 The script applies the small MinGW fixes in `patches/windows-cross/` to the renderer
-submodules and leaves a ready-to-zip folder in `build/win/package/`.
+submodules and leaves a ready-to-zip folder in `build/win/package/`. The HD board
+texture pack and the launcher logo are made from the game's own art, so they are
+not in this repository; set `HD_TEXTURE_PACK` and `LAUNCHER_LOGO` to bundle them.
+
+## How it works
+
+- The game's code ships as relocatable USO modules; their format is documented in [docs/USO_FORMAT.md](docs/USO_FORMAT.md)
+- The whole game (3,421 functions) is recompiled to C with N64Recomp, and its audio microcode with RSPRecomp
+- Its libultra 2.0I functions (213) and RSP microcode (F3DEX 1.23 family + audio) are identified
+- N64ModernRuntime, RT64 and RecompFrontend run it, kept in sync with the game's own module loader
+- Enhancements hook the recompiled code in `src/game/`; renderer changes are kept as patches in `patches/runtime/`
 
 ## Credits
 
@@ -59,7 +95,6 @@ submodules and leaves a ready-to-zip folder in `build/win/package/`.
   by cdlewis (GPL-3), whose runtime setup this port started from
 - [Zelda64Recomp](https://github.com/Zelda64Recomp/Zelda64Recomp) (GPL-3), for
   menu fonts and icons
-
 - [N64Recomp](https://github.com/N64Recomp/N64Recomp) by Mr-Wiseguy (MIT)
 - [djsaunde/1080-decomp](https://github.com/djsaunde/1080-decomp), used as a
   reference while working out the module format
