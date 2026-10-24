@@ -12,6 +12,8 @@
 #include <filesystem>
 #include <variant>
 
+#include <SDL.h>
+
 #include "librecomp/config.hpp"
 #include "librecomp/mods.hpp"
 #include "recompui/config.h"
@@ -58,6 +60,13 @@ void add_hd_textures_option(recomp::config::Config& graphics) {
 void install_hd_textures() {
     std::error_code ec;
     std::filesystem::path source = recompui::file::get_program_path() / "textures" / pack_name;
+    if (!std::filesystem::is_regular_file(source, ec)) {
+        // Started from another working directory: look next to the program.
+        if (char* base = SDL_GetBasePath()) {
+            source = std::filesystem::u8path(base) / "textures" / pack_name;
+            SDL_free(base);
+        }
+    }
     std::filesystem::path app = recompui::file::get_app_folder_path();
     if (app.empty() || !std::filesystem::is_regular_file(source, ec)) {
         return;
