@@ -134,8 +134,6 @@ set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/game/shadows.cpp
     ${CMAKE_SOURCE_DIR}/src/game/camera.cpp
     ${CMAKE_SOURCE_DIR}/src/game/crt_filter.cpp
-    ${CMAKE_SOURCE_DIR}/src/game/music.cpp
-    ${CMAKE_SOURCE_DIR}/src/game/music_decode.cpp
     ${CMAKE_SOURCE_DIR}/src/game/boards.cpp
     ${CMAKE_SOURCE_DIR}/src/game/achievements.cpp
 

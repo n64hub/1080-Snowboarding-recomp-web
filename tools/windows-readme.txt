@@ -17,14 +17,6 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
-Changes in v0.1.36: Custom Music (Settings > Sound, on by default). Put your own
-audio files in a folder named "music" next to the exe, named by song number,
-for example 03.ogg. Ogg, FLAC, MP3 and WAV work. While a song with a file is
-playing, the game's version is silenced and yours plays (looping) instead;
-songs without a file play as normal. Known numbers: 02 title screen,
-03 menus, 06 Crystal Lake. log.txt shows "[music] song NN started" for every
-song, so you can find the rest. Custom Music Volume sets their loudness.
-
 Changes in v0.1.35: New Board Thickness setting (launcher main page and
 Settings > Graphics). Thick, the default, gives the boards on the board select
 screen a solid dark edge instead of a paper-thin one. Original keeps the N64 look.
