@@ -317,6 +317,9 @@ void update_audio_converter() {
 }
 
 void set_frequency(uint32_t freq) {
+    if (freq != sample_rate) {
+        fprintf(stderr, "[audio] game output rate %u Hz\n", freq);
+    }
     sample_rate = freq;
 
     update_audio_converter();
