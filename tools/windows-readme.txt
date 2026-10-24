@@ -17,6 +17,12 @@ console window instead.
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
 
+Changes in v0.1.39: HD Textures now also cover the game's 2D art: menu
+titles and text, rider names and stat labels, the race HUD (time, speed,
+damage, place), title cards, logos and menu backgrounds are all sharper. The
+character select cabin is back to its original textures. Screens not seen in
+testing yet may still show some original text.
+
 Changes in v0.1.38: HD Textures are included and on by default. Sharper,
 4x upscaled textures for menus, riders, boards, signs, scenery, sky and the
 HUD, with smooth board edges; snow keeps its original look. Turn them off with

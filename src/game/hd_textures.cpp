@@ -47,8 +47,8 @@ void add_hd_textures_option(recomp::config::Config& graphics) {
     graphics.add_enum_option(
         option_id,
         "HD Textures",
-        "Sharper, 4x upscaled textures for menus, riders, boards, signs, scenery, sky and the HUD. "
-        "Snow keeps its original look. Board edges are smoothed. "
+        "Sharper, 4x upscaled textures for menus, text, the HUD, logos, riders, boards, signs, scenery and the sky. "
+        "Snow and the character select cabin keep their original look. Board edges are smoothed. "
         "<recomp-color primary>Off</recomp-color> shows the original N64 textures.",
         {
             { HdTextures::Off, "Off", "Off" },
