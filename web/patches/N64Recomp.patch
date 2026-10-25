@@ -1,0 +1,145 @@
+diff --git a/src/cgenerator.cpp b/src/cgenerator.cpp
+index 6a7186e..7456db8 100644
+--- a/src/cgenerator.cpp
++++ b/src/cgenerator.cpp
+@@ -85,6 +85,16 @@ static std::string gpr_to_string(int gpr_index) {
+     return fmt::format("ctx->r{}", gpr_index);
+ }
+ 
++// An assignment of a value to an op's output. With $zero (gpr_to_string's "0") as the output it is the value alone, cast
++// to void: the op is still done, since a load can fault and a load from a device register has side effects, and its
++// result thrown away. "0 = MEM_W(...)" is not C.
++static std::string assignment(const std::string& output, const std::string& value) {
++    if (output == "0") {
++        return fmt::format("(void)({});", value);
++    }
++    return fmt::format("{} = {};", output, value);
++}
++
+ static std::string fpr_to_string(int fpr_index) {
+     return fmt::format("ctx->f{}.fl", fpr_index);
+ }
+@@ -398,8 +408,10 @@ void N64Recomp::CGenerator::emit_function_start(const std::string& function_name
+         "RECOMP_FUNC void {}(uint8_t* rdram, recomp_context* ctx) {{\n"
+         // these variables shouldn't need to be preserved across function boundaries, so make them local for more efficient output
+         "    uint64_t hi = 0, lo = 0, result = 0;\n"
+-        "    int c1cs = 0;\n", // cop1 conditional signal
+-        function_name);
++        "    int c1cs = 0;\n" // cop1 conditional signal
++        // where a mod's replacement or hooks of this function run in WebAssembly, which can't rewrite its code (recomp.h)
++        "    RECOMP_FUNC_ENTRY({})\n",
++        function_name, function_name);
+ }
+ 
+ void N64Recomp::CGenerator::emit_function_end() const {
+@@ -417,10 +429,19 @@ void N64Recomp::CGenerator::emit_function_call_by_register(int reg) const {
+ void N64Recomp::CGenerator::emit_function_call_reference_symbol(const Context& context, uint16_t section_index, size_t symbol_index, uint32_t target_section_offset) const {
+     (void)target_section_offset;
+     const N64Recomp::ReferenceSymbol& sym = context.get_reference_symbol(section_index, symbol_index);
+-    fmt::print(output_file, "{}(rdram, ctx);\n", sym.name);
++    // The base game's own calls to a function the runtime reimplements, or that the recompiler ignores or renames, go to
++    // <name>_recomp (main.cpp renames them), so a patch's call to it through its reference symbol does too. By its bare
++    // name it would reach libultra's native function instead (osInitialize(void) for osInitialize), which happens to work
++    // on x86 and is a signature mismatch in WebAssembly: an error once funcs.h declares it, a trap at run time without.
++    const bool renamed = N64Recomp::reimplemented_funcs.contains(sym.name) || N64Recomp::ignored_funcs.contains(sym.name) ||
++        N64Recomp::renamed_funcs.contains(sym.name);
++    const std::string name = renamed ? sym.name + "_recomp" : sym.name;
++    context.called_functions.insert(name);
++    fmt::print(output_file, "{}(rdram, ctx);\n", name);
+ }
+ 
+ void N64Recomp::CGenerator::emit_function_call(const Context& context, size_t function_index) const {
++    context.called_functions.insert(context.functions[function_index].name);
+     fmt::print(output_file, "{}(rdram, ctx);\n", context.functions[function_index].name);
+ }
+ 
+@@ -428,6 +449,14 @@ void N64Recomp::CGenerator::emit_named_function_call(const std::string& function
+     fmt::print(output_file, "{}(rdram, ctx);\n", function_name);
+ }
+ 
++void N64Recomp::CGenerator::emit_tail_call_start(const Context& context) const {
++    // recomp.h makes it a forced tail call where that matters (WebAssembly), and nothing elsewhere. Trace mode's
++    // TRACE_RETURN after the call has to run, so it keeps the plain call.
++    if (!context.trace_mode) {
++        fmt::print(output_file, "RECOMP_TAIL_CALL ");
++    }
++}
++
+ void N64Recomp::CGenerator::emit_goto(const std::string& target) const {
+     fmt::print(output_file,
+         "    goto {};\n", target);
+@@ -494,7 +523,7 @@ void N64Recomp::CGenerator::emit_check_nan(int fpr, bool is_double) const {
+ }
+ 
+ void N64Recomp::CGenerator::emit_cop0_status_read(int reg) const {
+-    fmt::print(output_file, "{} = cop0_status_read(ctx);\n", gpr_to_string(reg));
++    fmt::print(output_file, "{}\n", assignment(gpr_to_string(reg), "cop0_status_read(ctx)"));
+ }
+ 
+ void N64Recomp::CGenerator::emit_cop0_status_write(int reg) const {
+@@ -502,13 +531,16 @@ void N64Recomp::CGenerator::emit_cop0_status_write(int reg) const {
+ }
+ 
+ void N64Recomp::CGenerator::emit_cop1_cs_read(int reg) const {
+-    fmt::print(output_file, "{} = get_cop1_cs();\n", gpr_to_string(reg));
++    fmt::print(output_file, "{}\n", assignment(gpr_to_string(reg), "get_cop1_cs()"));
+ }
+ 
+ void N64Recomp::CGenerator::emit_cop1_cs_write(int reg) const {
+     fmt::print(output_file, "set_cop1_cs({});\n", gpr_to_string(reg));
+ }
+ 
++// A division by zero doesn't trap on the VR4300: the quotient is -1 (1 for a signed division of a negative dividend)
++// and the remainder is the dividend. Code that divides without checking its divisor gets those, so the divisions are
++// written to give them, where dividing by zero on the host would trap (in wasm, and on x86 natively).
+ void N64Recomp::CGenerator::emit_muldiv(InstrId instr_id, int reg1, int reg2) const {
+     switch (instr_id) {
+         case InstrId::cpu_mult:
+@@ -525,16 +557,16 @@ void N64Recomp::CGenerator::emit_muldiv(InstrId instr_id, int reg1, int reg2) co
+             break;
+         case InstrId::cpu_div:
+             // Cast to 64-bits before division to prevent artihmetic exception for s32(0x80000000) / -1
+-            fmt::print(output_file, "lo = S32(S64(S32({0})) / S64(S32({1}))); hi = S32(S64(S32({0})) % S64(S32({1})));\n", gpr_to_string(reg1), gpr_to_string(reg2));
++            fmt::print(output_file, "if (S32({1}) == 0) {{ lo = S32({0}) >= 0 ? -1 : 1; hi = S32({0}); }} else {{ lo = S32(S64(S32({0})) / S64(S32({1}))); hi = S32(S64(S32({0})) % S64(S32({1}))); }}\n", gpr_to_string(reg1), gpr_to_string(reg2));
+             break;
+         case InstrId::cpu_ddiv:
+-            fmt::print(output_file, "DDIV(S64({}), S64({}), &lo, &hi);\n", gpr_to_string(reg1), gpr_to_string(reg2));
++            fmt::print(output_file, "if (S64({1}) == 0) {{ lo = S64({0}) >= 0 ? -1 : 1; hi = {0}; }} else DDIV(S64({0}), S64({1}), &lo, &hi);\n", gpr_to_string(reg1), gpr_to_string(reg2));
+             break;
+         case InstrId::cpu_divu:
+-            fmt::print(output_file, "lo = S32(U32({0}) / U32({1})); hi = S32(U32({0}) % U32({1}));\n", gpr_to_string(reg1), gpr_to_string(reg2));
++            fmt::print(output_file, "if (U32({1}) == 0) {{ lo = S32(0xFFFFFFFF); hi = S32({0}); }} else {{ lo = S32(U32({0}) / U32({1})); hi = S32(U32({0}) % U32({1})); }}\n", gpr_to_string(reg1), gpr_to_string(reg2));
+             break;
+         case InstrId::cpu_ddivu:
+-            fmt::print(output_file, "DDIVU(U64({}), U64({}), &lo, &hi);\n", gpr_to_string(reg1), gpr_to_string(reg2));
++            fmt::print(output_file, "if (U64({1}) == 0) {{ lo = -1; hi = {0}; }} else DDIVU(U64({0}), U64({1}), &lo, &hi);\n", gpr_to_string(reg1), gpr_to_string(reg2));
+             break;
+         default:
+             assert(false);
+@@ -569,12 +601,7 @@ void N64Recomp::CGenerator::process_binary_op(const BinaryOp& op, const Instruct
+     thread_local std::string expression{};
+     get_operand_string(op.output, UnaryOpType::None, ctx, output);
+     get_binary_expr_string(op.type, op.operands, ctx, output, expression);
+-    if (output == "0") {
+-        // Writes to $zero are discarded, but keep the read (e.g. a dummy load).
+-        fmt::print(output_file, "(void)({});\n", expression);
+-        return;
+-    }
+-    fmt::print(output_file, "{} = {};\n", output, expression);
++    fmt::print(output_file, "{}\n", assignment(output, expression));
+ }
+ 
+ void N64Recomp::CGenerator::process_unary_op(const UnaryOp& op, const InstructionContext& ctx) const {
+@@ -584,11 +611,7 @@ void N64Recomp::CGenerator::process_unary_op(const UnaryOp& op, const Instructio
+     thread_local std::string input{};
+     get_operand_string(op.output, UnaryOpType::None, ctx, output);
+     get_operand_string(op.input, op.operation, ctx, input);
+-    if (output == "0") {
+-        fmt::print(output_file, "(void)({});\n", input);
+-        return;
+-    }
+-    fmt::print(output_file, "{} = {};\n", output, input);
++    fmt::print(output_file, "{}\n", assignment(output, input));
+ }
+ 
+ void N64Recomp::CGenerator::process_store_op(const StoreOp& op, const InstructionContext& ctx) const {

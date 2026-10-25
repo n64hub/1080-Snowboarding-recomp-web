@@ -1,3 +1,19 @@
+> [!WARNING]
+> **This is n64hub/1080-Snowboarding-recomp-web, a fork, not 1080° Snowboarding: Recompiled.** Its `main` branch
+> builds the game into a web page (WebGPU, through [N64Recomp-browser](https://github.com/n64hub/N64Recomp-browser)),
+> and everything on that branch past upstream's commits was written by AI (Claude). It is not made, endorsed or
+> supported by 1080° Snowboarding: Recompiled's authors: nothing here is offered upstream, and please don't take
+> issues with this fork to them. Building the page: [BUILDING.md](BUILDING.md).
+>
+> This port is here to build out and test N64Recomp-browser's web support on another game than the ones it was written
+> for: what it turns up is fixed there where it can be, so every recomp's page gets the fix.
+
+**Play it in the browser: https://n64hub.com/1080-snowboarding/**, with your own 1080° Snowboarding ROM (USA), picked
+in the launcher and kept in the browser. It needs WebGPU (Chrome or Edge 113 and up). The page is built from this
+branch and published with N64Recomp-browser's `tools/publish_page.sh`, so it can be a commit or two behind. The page
+has every option the desktop build has but RetroAchievements, which the page leaves out, and MSAA, which RT64 can't do
+on WebGPU (it has no sample positions).
+
 <h1 align="center">1080° Snowboarding: Recompiled</h1>
 
 <p align="center">A native PC port of the 1998 N64 snowboarding game 1080° Snowboarding, built with static recompilation, with widescreen, 60 and 120 fps, longer draw distance, HD boards, RetroAchievements and more, all optional.<br>Made by Vibe Slop Studios.</p>

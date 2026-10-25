@@ -1,0 +1,78 @@
+# The RT64 shaders the web page builds: one shader description a line, other mode L and H, color combiner L and H,
+# flags, in hex. RT64 specializes each one's WGSL when the page is built and builds them with the game waiting: those
+# above the first "section" line before the game starts, and a section when a frame first wants 4 of its shaders,
+# so that nothing draws with the ubershader, which integrated graphics can't afford (N64Recomp-browser's README,
+# "Give RT64 a list of the game's shaders").
+#
+# Recorded by playing, a page load a section: N64Recomp-browser's tools/record_shaders.mjs with tools/shader_plan.json,
+# which drives the menus with the default keys and knows where the game is by its loaded modules
+# (tools/game_state.js) and the console line the game prints as it loads a course. Section 0 is the launcher, the
+# intro, the title and its demo on Crystal Lake, and the menus: Match Race's level select, Time Attack's rider, board
+# and course select. Then the three courses a new save has, a Match Race on Crystal Lake, 100 s of it, and Time Attack
+# on Crystal Peak and on Golden Forest, 90 s each, and Training's course, 60 s. Not recorded: the courses a save opens
+# later (Mountain Village, Dragon Cave, Deadly Fall, the Half Pipe and Air Make), Trick Attack, Contest and 2P VS,
+# and a race's end past the time ridden. Flags follow settings (filtering, HDR, upscaling), so a change to one of
+# those defaults means recording again.
+00404240 00802c0f fc309661 ff2fffff 008a010b
+00504240 00902ccf fcffffff fffcf438 088e002b
+00404240 00802c0f fc309661 ff2fffff 008a000b
+0c084000 0088ac0f fc357e6a 11fcf67b 088a0000
+c8112230 00982c0f fc127fff fffff238 0ccb540c
+c8112230 00982c0f fc127fff fffff238 099b100c
+c8112230 00982c0f fc127fff fffff238 0aaaaa0c
+c8112230 00982c0f fc127fff fffff238 088a000c
+c8112230 00982c0f fc127fff fffff238 0b33320c
+c8112230 00982c0f fc127fff fffff238 0a22220c
+c8112230 00982c0f fc127fff fffff238 0bba440c
+c8105078 00982c0f fc40b3ff 3ffdfe38 099b1008
+c8113078 00982c0f fc127fff fffff238 099b1008
+c8113078 00982c0f fc127fff fffff238 0ccb5408
+004041c8 00882c0f fc30b261 ff67ffff 0ccb540c
+00442048 00882c0f fcffffff fffdf6fb 08000000
+00443078 00882c0f fc121824 ff33ffff 0ccb540c
+00442478 00882c0f fc121824 ff33ffff 0ccb540c
+00442478 00882c0f fc121824 ff33ffff 0aaaaa0c
+00404240 00882c0f fc409881 ff33ffff 088a000c
+00404a54 00802c0f fcff9bff ff36ff7f 088a000b
+00442478 00882c0f fc121824 ff33ffff 088a000c
+00442478 00882c0f fc121824 ff33ffff 0bba440c
+00442478 00882c0f fc121824 ff33ffff 099b100c
+004045d8 00882c0f fc121824 ff33ffff 0ccb5400
+004045dc 00802c0f fcffb3ff ff65feff 088a000b
+004041cc 00802c0f fcffb3ff ff65feff 088a000b
+00404a54 00802c0f fcff9bff ff36ff7f 008a000b
+00404240 00802c0f fc309a61 ff37ffff 008a010b
+00443048 00882c0f fc30b261 ff67ffff 0aaaaa00
+00404a50 00882c0f fc409881 ff33ffff 088a000c
+00442230 00882c0f fc121824 ff33ffff 0ccb540c
+00442230 00882c0f fc121824 ff33ffff 099b100c
+0c084000 00882c0f fc121824 ff33ffff 08035408
+00405078 00882c0f fc40b281 3365feff 099b1008
+00443078 00882c0f fc121824 ff33ffff 0ccb5408
+0c084000 00882c0f fc121824 ff33ffff 088a0108
+004041c8 00882c0f fc30b261 ff67ffff 0ccb5408
+00443078 00882c0f fc121824 ff33ffff 0aaaaa08
+00404240 00802c0f fcffffff fffcf279 008a010b
+00442478 00882c0f fcffffff fffe793c 0800000c
+00443078 00882c0f fc121824 ff33ffff 0aaaaa0c
+00404240 00802c0f fc309a61 5536ff7f 008a010b
+section crystal-lake
+00404240 00802c0f fc309a61 5536ff7f 008a000b
+004041c8 00882c0f fcffffff fffdf6fb 0800000b
+00404240 00802c0f fc309a61 ff37ffff 008a000b
+00442230 00882c0f fcffffff fffe793c 0800000c
+section crystal-peak
+c8113078 00982c0f fc127fff fffff238 088a0008
+00404a54 00802c0f fcffb3ff ff65feff 088a000b
+00404a54 00802c0f fcffb3ff ff65feff 008a000b
+00404240 00802c0f fc309a61 5536ff7f 008a000b
+00404240 00802c0f fc309a61 ff37ffff 008a000b
+c8105078 00982c0f fc40e3ff 3ffdce38 0ccb5408
+section golden-forest
+c8105078 00982c0f fc40b3ff 3ffdfe38 0ccb5408
+c8113078 00982c0f fc127fff fffff238 08035408
+c8105078 00982c0f fc40e3ff 3ffdce38 0ccb5408
+00404240 00802c0f fc309a61 5536ff7f 008a000b
+00404240 00802c0f fc309a61 ff37ffff 008a000b
+section training
+c8113078 00982c0f fc127fff fffff238 0b333208

@@ -107,6 +107,19 @@ void game::init_config() {
             }
             std::ofstream{ res_marker };
         }
+
+#ifdef __EMSCRIPTEN__
+        // A page draws at the display's rate, RT64 interpolating between the game's frames, as every N64Recomp-browser
+        // page does: Framerate Display, set once, so a rate the player picks after it is kept.
+        std::filesystem::path page_marker = app_dir / "page_framerate_display";
+        if (!std::filesystem::exists(page_marker)) {
+            namespace gfx = recompui::config::graphics::options;
+            auto& graphics = recompui::config::get_graphics_config();
+            graphics.set_option_value(gfx::rr_option, static_cast<uint32_t>(ultramodern::renderer::RefreshRate::Display));
+            graphics.save_config();
+            std::ofstream{ page_marker };
+        }
+#endif
     }
 }
 

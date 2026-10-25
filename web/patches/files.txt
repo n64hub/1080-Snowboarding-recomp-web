@@ -1,0 +1,30 @@
+# The files where this game's own patches (patches/) or the commits its submodules pin change the same lines as
+# N64Recomp-browser's web support: <project> <path in the project>. tools/build_web.sh leaves each out of
+# N64Recomp-browser's patch for its project and applies web/patches/<project>.patch in its place, the web's change to
+# these files merged by hand on top of the game's. The web's later changes to them are merged in by apply.cmake --since
+# from the commit below; one that meets the game's own lines stops the build, for another merge by hand and this
+# commit moved.
+#
+# rt64: the game's rt64 is newer than the web's (the texture decoder shared with the CPU in src/shared, GPU timestamps
+# that may be missing, the VI rate of uneven frames, file dialogs that answer by callback) and has its camera cuts
+# patch (staleWritebacks). The shared decoder calls TMEM's sizes TMEM_RDP_*, the web's shaders RDP_TMEM_*. With
+# RT64_UNEVEN_FRAME_RATES (on in a page) the web's rate for uneven frames is used, the game's otherwise.
+# hlslpp: the game's rt64 pins a newer hlslpp, which shifts each lane by its own count its own way; the web's other
+# wasm fixes are kept.
+# N64Recomp: the game's own patch writes ops into $zero as the web's assignment() does; the web's is kept.
+# RecompFrontend: the game's RecompFrontend saves player assignments next to the web's mappings object.
+# merged from N64Recomp-browser 66f868c71bf18f2f1a8fbc6cc3bfc31150e1cd3d
+rt64 src/gui/rt64_file_dialog.cpp
+rt64 src/gui/rt64_inspector.cpp
+rt64 src/hle/rt64_game_frame.cpp
+rt64 src/hle/rt64_state.cpp
+rt64 src/hle/rt64_state.h
+rt64 src/hle/rt64_vi.cpp
+rt64 src/hle/rt64_workload_queue.cpp
+rt64 src/shaders/FbReinterpretCS.hlsl
+rt64 src/shaders/TextureDecodeCS.hlsl
+rt64 src/shaders/TextureDecoder.hlsli
+rt64 src/shaders/TextureSampler.hlsli
+hlslpp include/hlsl++/platforms/wasm.h
+N64Recomp src/cgenerator.cpp
+RecompFrontend recompinput/src/profiles.cpp

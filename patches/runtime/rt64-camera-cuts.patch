@@ -786,10 +786,10 @@ index b4ff4e9..ca53c14 100644
 +    RT64::crtFilterMode.store(mode, std::memory_order_relaxed);
 +}
 diff --git a/src/shaders/VideoInterfacePS.hlsl b/src/shaders/VideoInterfacePS.hlsl
-index 3f33475..51c28c3 100644
+index 3f33475..8616956 100644
 --- a/src/shaders/VideoInterfacePS.hlsl
 +++ b/src/shaders/VideoInterfacePS.hlsl
-@@ -32,10 +32,67 @@ float4 PixelAntialiasing(float2 uv) {
+@@ -32,10 +32,68 @@ float4 PixelAntialiasing(float2 uv) {
      return SampleInput(uvTexspace / gConstants.textureResolution);
  }
  
@@ -829,15 +829,17 @@ index 3f33475..51c28c3 100644
 +}
 +
 +float4 PSMain(in float4 pos : SV_Position, in float2 uv : TEXCOORD0) : SV_TARGET {
++    // The screen is sampled before any return that depends on the pixel: PixelAntialiasing takes derivatives
++    // (fwidth), which are only defined in uniform control flow, and WGSL refuses the shader otherwise.
++    const bool fullCRT = (gConstants.crtMode > 1.5f);
++    const float2 screenUV = fullCRT ? CurveScreen(uv) : uv;
++    float4 color = SampleScreen(screenUV);
 +    if (gConstants.crtMode < 0.5f) {
-+        return SampleScreen(uv);
++        return color;
 +    }
 +
-+    float2 screenUV = uv;
 +    float edge = 1.0f;
-+    const bool fullCRT = (gConstants.crtMode > 1.5f);
 +    if (fullCRT) {
-+        screenUV = CurveScreen(uv);
 +        if (any(screenUV < 0.0f) || any(screenUV > 1.0f)) {
 +            return float4(0.0f, 0.0f, 0.0f, 1.0f);
 +        }
@@ -849,7 +851,6 @@ index 3f33475..51c28c3 100644
 +        edge *= border.x * border.y;
 +    }
 +
-+    float4 color = SampleScreen(screenUV);
 +    color.rgb = Scanlines(color.rgb, screenUV.y);
 +    if (fullCRT) {
 +        color.rgb = ApertureGrille(color.rgb, pos.x);

@@ -1,0 +1,36 @@
+diff --git a/recompinput/src/profiles.cpp b/recompinput/src/profiles.cpp
+index fe89661..10ab96f 100644
+--- a/recompinput/src/profiles.cpp
++++ b/recompinput/src/profiles.cpp
+@@ -459,6 +459,21 @@ namespace recompinput {
+     }
+ 
+     static void add_input_bindings(json& out, int profile_index, GameInput input) {
++#ifdef __EMSCRIPTEN__
++        // A page's build changes under its player at every update, so only the bindings the player changed are saved:
++        // an input left at its defaults follows the defaults of the build that reads the file (load_input_device_from_json
++        // gives an input the file leaves out its defaults), not those of the build that first wrote it.
++        const std::vector<InputField>& defaults =
++            recompinput::get_default_mapping_for_input(profiles::get_input_profile_device(profile_index), input);
++        bool changed = false;
++        for (size_t binding_index = 0; binding_index < recompinput::num_bindings_per_input; binding_index++) {
++            InputField default_field = binding_index < defaults.size() ? defaults[binding_index] : InputField{};
++            changed |= profiles::get_input_binding(profile_index, input, binding_index) != default_field;
++        }
++        if (!changed) {
++            return;
++        }
++#endif
+         const std::string& input_name = recompinput::get_game_input_enum_name(input);
+         json& out_array = out[input_name];
+         out_array = json::array();
+@@ -485,6 +500,9 @@ namespace recompinput {
+             profile["custom"] = profiles::is_input_profile_custom(i);
+             profile["mappings"] = json();
+ 
++#ifdef __EMSCRIPTEN__
++            profile["mappings"] = json::object();
++#endif
+             for (int j = 0; j < (int)(GameInput::COUNT); j++) {
+                 add_input_bindings(profile["mappings"], i, static_cast<GameInput>(j));
+             }

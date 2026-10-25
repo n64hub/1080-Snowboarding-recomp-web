@@ -12,9 +12,25 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# The web page (BUILDING-WEB.md): threads, wasm exceptions, SIMD (hlslpp's wasm backend and the auto-vectorizer) and
+# tail calls (recomp.h's RECOMP_TAIL_CALL in the recompiled code) for every target. xxHash's NEON path through
+# Emscripten's arm_neon.h doesn't compile in C++.
+if (EMSCRIPTEN)
+    add_compile_options(-pthread -fwasm-exceptions -msimd128 -mtail-call "-DXXH_HAS_INCLUDE(x)=0")
+    add_link_options(-pthread -fwasm-exceptions -mtail-call)
+    # ccache when it is on PATH.
+    include(${CMAKE_SOURCE_DIR}/lib/N64Recomp-browser/frontend/build_speed.cmake)
+    # The shaders the page specializes at build time: the boot's before the game starts, each section's when the game
+    # first draws there (web/rt64_shaders.txt says how it was recorded).
+    if (EXISTS ${CMAKE_SOURCE_DIR}/web/rt64_shaders.txt)
+        set(RT64_PREBUILT_SHADER_LIST ${CMAKE_SOURCE_DIR}/web/rt64_shaders.txt)
+    endif()
+endif()
+
 # Small fixes to the runtime submodule (see patches/runtime/). Applied once;
-# a patch that is already in place is left alone.
+# a patch that is already in place is left alone. The page's tools/build_web.sh applies them itself, under the web's.
 find_package(Git QUIET)
+if (NOT EMSCRIPTEN)
 foreach(runtime_patch IN ITEMS
         "lib/N64ModernRuntime|patches/runtime/N64ModernRuntime.patch"
         "lib/RecompFrontend|patches/runtime/RecompFrontend.patch"
@@ -32,6 +48,7 @@ foreach(runtime_patch IN ITEMS
         endif()
     endif()
 endforeach()
+endif()
 
 # Where tools/recompile.sh put the recompiled game. Nothing derived from the
 # ROM is checked in, so run that script first.
@@ -93,6 +110,12 @@ set(BUILD_SHARED_LIBS OFF)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime)
 
+# The page: N64Recomp-browser's frontend/ (the page shell, the file picker, sound, the cross-origin service worker).
+if (EMSCRIPTEN)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/lib/N64Recomp-browser/frontend ${CMAKE_BINARY_DIR}/web_frontend)
+    target_compile_options(fmt PRIVATE -include cstdlib)
+endif()
+
 target_include_directories(rt64 PRIVATE ${CMAKE_BINARY_DIR}/rt64/src)
 
 # RecompiledFuncs - Library containing the primary recompiler output
@@ -116,6 +139,11 @@ file(GLOB FUNC_C_SOURCES ${GAME_GENERATED_DIR}/RecompiledFuncs/*.c)
 file(GLOB FUNC_CXX_SOURCES ${GAME_GENERATED_DIR}/RecompiledFuncs/*.cpp)
 
 target_sources(RecompiledFuncs PRIVATE ${FUNC_C_SOURCES} ${FUNC_CXX_SOURCES})
+
+# wasm-ld turns a call through a wrong implicit declaration into a trap, so on the web it is an error instead.
+if (EMSCRIPTEN)
+    target_compile_options(RecompiledFuncs PRIVATE -Werror=implicit-function-declaration)
+endif()
 
 # Main executable
 add_executable(1080SnowboardingRecompiled)
@@ -329,6 +357,11 @@ else()
     endif()
 endif()
 
+# DXC runs on the machine that builds, which for the page isn't the 32-bit target.
+if (EMSCRIPTEN)
+    set (DXC "LD_LIBRARY_PATH=${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/lib/x64" "${PROJECT_SOURCE_DIR}/lib/rt64/src/contrib/dxc/bin/x64/dxc-linux")
+endif()
+
 set(RECOMP_FRONTEND_N64MODERNRUNTIME_PATH ${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime)
 set(RECOMP_FRONTEND_RT64_PATH ${CMAKE_SOURCE_DIR}/lib/rt64)
 
@@ -371,8 +404,18 @@ target_link_libraries(1080SnowboardingRecompiled PRIVATE
     librecomp
     ultramodern
     rt64
-    nfd
 )
+
+# The page reads the assets and the controller database from its preloaded file system, and asks the page for files
+# where the desktop opens a native dialog.
+if (EMSCRIPTEN)
+    n64recomp_browser_frontend_page(1080SnowboardingRecompiled)
+    target_link_options(1080SnowboardingRecompiled PRIVATE
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/assets@/assets"
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/recompcontrollerdb.txt@/recompcontrollerdb.txt")
+else()
+    target_link_libraries(1080SnowboardingRecompiled PRIVATE nfd)
+endif()
 
 target_sources(1080SnowboardingRecompiled PRIVATE ${SOURCES})
 

@@ -146,6 +146,10 @@ void add_frame_rate_row(ContextId context, Element* parent) {
     radio->add_option("30 (N64)");
     radio->add_option("60");
     radio->add_option("120");
+#ifdef __EMSCRIPTEN__
+    // A page draws at the display's rate by default (game::init_config), so it offers that rate too.
+    radio->add_option("Display");
+#endif
 
     auto rate = static_cast<RefreshRate>(std::get<uint32_t>(graphics.get_option_value(gfx::rr_option)));
     double manual = std::get<double>(graphics.get_option_value(gfx::rr_manual_value));
@@ -156,6 +160,11 @@ void add_frame_rate_row(ContextId context, Element* parent) {
     else if (rate == RefreshRate::Manual && manual >= 90.0) {
         index = 2;
     }
+#ifdef __EMSCRIPTEN__
+    else if (rate == RefreshRate::Display) {
+        index = 3;
+    }
+#endif
     radio->set_index(index);
     radio->set_focus_callback([](bool active) {
         if (active) {
@@ -167,6 +176,9 @@ void add_frame_rate_row(ContextId context, Element* parent) {
         auto& config = recompui::config::get_graphics_config();
         if (i == 0) {
             config.set_option_value(gfx::rr_option, static_cast<uint32_t>(RefreshRate::Original));
+        }
+        else if (i == 3) {
+            config.set_option_value(gfx::rr_option, static_cast<uint32_t>(RefreshRate::Display));
         }
         else {
             config.set_option_value(gfx::rr_option, static_cast<uint32_t>(RefreshRate::Manual));
@@ -436,7 +448,10 @@ void build_launcher(LauncherMenu* menu) {
     options->set_width(42.0f, Unit::Percent);
     options->set_gap(0.0f);
     options->add_start_game_or_load_rom_option();
+#ifndef __EMSCRIPTEN__
+    // Not on a page: achievements are off there (src/game/achievements.cpp).
     options->add_option("Achievements", []() { show_achievements_view(!showing_achievements); });
+#endif
     options->add_setup_controls_option();
     options->add_settings_option();
     options->add_mods_option();

@@ -236,6 +236,11 @@ HttpResult http_request(const std::string& url, const char* post_data, const cha
     WinHttpCloseHandle(session);
     return result;
 }
+#elif defined(__EMSCRIPTEN__)
+// A page has neither WinHTTP nor curl, and achievements are off there (init() below): every request fails.
+HttpResult http_request(const std::string&, const char*, const char*) {
+    return {};
+}
 #else
 // Linux builds are for development; they use the curl command.
 std::string shell_quote(const std::string& text) {
@@ -525,6 +530,11 @@ bool md5_of_rom(std::string& out) {
 }
 
 void game::achievements::init() {
+#ifdef __EMSCRIPTEN__
+    // Off on a page, which has no HTTP transport for rcheevos (http_request above): without a client every call here
+    // does nothing, and the launcher leaves out its Achievements page.
+    return;
+#endif
     client = rc_client_create(read_memory, server_call);
     if (client == nullptr) {
         return;

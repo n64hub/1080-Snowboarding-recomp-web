@@ -11,7 +11,9 @@
 #include <stdexcept>
 #include <cinttypes>
 
-#include "nfd.h"
+#ifndef __EMSCRIPTEN__
+#include "nfd.h" // a browser has no native file dialogs; RecompFrontend asks the page instead
+#endif
 
 #include "ultramodern/ultra64.h"
 #include "ultramodern/ultramodern.hpp"
@@ -47,6 +49,9 @@
 #include "theme.h"
 #include "launcher.h"
 #include "game_achievements.h"
+#ifdef __EMSCRIPTEN__
+#include "audio_output.h"
+#endif
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -176,7 +181,8 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
 
 #if defined(_WIN32)
     return ultramodern::renderer::WindowHandle{ wmInfo.info.win.window, GetCurrentThreadId() };
-#elif defined(__linux__) || defined(__ANDROID__)
+#elif defined(__linux__) || defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+    // In a browser the window is the page's canvas, sized by the page.
     return ultramodern::renderer::WindowHandle{ window };
 #elif defined(__APPLE__)
     SDL_MetalView view = SDL_Metal_CreateView(window);
@@ -209,6 +215,27 @@ constexpr uint32_t duplicated_input_frames = 4;
 static uint32_t discarded_output_frames;
 
 constexpr uint32_t bytes_per_frame = input_channels * sizeof(float);
+
+// On a page, sound plays through N64Recomp-browser's AudioWorklet output (audio_output.h) instead of SDL's queue:
+// Emscripten's SDL2 plays from the page's thread, where WebGPU's work runs, and its sound breaks up whenever that
+// thread is busy.
+#ifdef __EMSCRIPTEN__
+static uint64_t get_queued_audio_bytes() {
+    return uint64_t(n64recomp_browser::audio::queued_frames()) * output_channels * sizeof(float);
+}
+
+static void queue_audio(const float* samples, uint32_t byte_count) {
+    n64recomp_browser::audio::queue(samples, byte_count / (output_channels * sizeof(float)));
+}
+#else
+static uint64_t get_queued_audio_bytes() {
+    return SDL_GetQueuedAudioSize(audio_device);
+}
+
+static void queue_audio(const float* samples, uint32_t byte_count) {
+    SDL_QueueAudio(audio_device, samples, byte_count);
+}
+#endif
 
 void queue_samples(int16_t* audio_data, size_t sample_count) {
     // Buffer for holding the output of swapping the audio channels. This is reused across
@@ -258,7 +285,7 @@ void queue_samples(int16_t* audio_data, size_t sample_count) {
     }
 
     uint64_t cur_queued_microseconds =
-        uint64_t(SDL_GetQueuedAudioSize(audio_device)) / bytes_per_frame * 1000000 / sample_rate;
+        get_queued_audio_bytes() / bytes_per_frame * 1000000 / sample_rate;
     uint32_t num_bytes_to_queue =
         audio_convert.len_cvt - output_channels * discarded_output_frames * sizeof(swap_buffer[0]);
     float* samples_to_queue = swap_buffer.data() + output_channels * discarded_output_frames / 2;
@@ -278,13 +305,13 @@ void queue_samples(int16_t* audio_data, size_t sample_count) {
     // Queue the swapped audio data.
     // Offset the data start by only half the discarded frame count as the other half of the discarded frames are at the
     // end of the buffer.
-    SDL_QueueAudio(audio_device, samples_to_queue, num_bytes_to_queue);
+    queue_audio(samples_to_queue, num_bytes_to_queue);
 }
 
 size_t get_frames_remaining() {
     constexpr float buffer_offset_frames = 1.0f;
     // Get the number of remaining buffered audio bytes.
-    uint64_t buffered_byte_count = SDL_GetQueuedAudioSize(audio_device);
+    uint64_t buffered_byte_count = get_queued_audio_bytes();
 
     // Scale the byte count based on the ratio of sample rates and channel counts.
     buffered_byte_count = buffered_byte_count * 2 * sample_rate / output_sample_rate / output_channels;
@@ -326,6 +353,11 @@ void set_frequency(uint32_t freq) {
 }
 
 bool reset_audio(uint32_t output_freq) {
+#ifdef __EMSCRIPTEN__
+    output_sample_rate = n64recomp_browser::audio::open(output_channels);
+    update_audio_converter();
+    return true;
+#endif
     SDL_AudioSpec spec_desired{ .freq = (int) output_freq,
                                 .format = AUDIO_F32,
                                 .channels = (Uint8) output_channels,
@@ -481,7 +513,7 @@ void release_preload(PreloadContext& context) {
     context = {};
 }
 
-#elif defined(__linux__) || defined(__APPLE__)
+#elif defined(__linux__) || defined(__APPLE__) || defined(__EMSCRIPTEN__)
 
 struct PreloadContext {};
 
@@ -635,7 +667,9 @@ int main(int argc, char** argv) {
     }
 
     // Initialize native file dialogs after all fallible startup services have succeeded.
+#ifndef __EMSCRIPTEN__
     NFD_Init();
+#endif
 
     // Source controller mappings file
     std::u8string controller_db_path = (recompui::file::get_program_path() / "recompcontrollerdb.txt").u8string();
@@ -748,7 +782,9 @@ int main(int argc, char** argv) {
         .threads_callbacks = threads_callbacks,
     });
 
+#ifndef __EMSCRIPTEN__
     NFD_Quit();
+#endif
 
     if (preloaded) {
         release_preload(preload_context);
