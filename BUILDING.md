@@ -44,7 +44,8 @@ it in a browser with WebGPU. The ROM, settings and saves are kept in the browser
 RetroAchievements: the launcher has no Achievements option on the page and `src/game/achievements.cpp` starts no
 client there. MSAA: RT64 has none on WebGPU, which gives no sample positions. Everything else is the desktop
 build's, and a page starts with Framerate at Display, RT64 interpolating to the display's rate, and Resolution at
-Auto, the canvas's size.
+Auto, the canvas's size. Render to RAM: the page draws each frame on the GPU only and copies none back to the game's
+memory, since nothing the game shows reads one (`src/main/main.cpp` says how that was found).
 
 ## The shader list
 

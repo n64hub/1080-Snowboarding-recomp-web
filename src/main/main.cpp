@@ -714,6 +714,13 @@ int main(int argc, char** argv) {
     ultramodern::renderer::callbacks_t renderer_callbacks{
         .create_render_context =
             [](uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool developer_mode) {
+                // Render to RAM is off on the page: played without it, every screen its plans reach (the intro, the title,
+                // the menus and their blurred backgrounds, a Match Race, its pause menu, the next round's start) draws as with
+                // RT64's exact copy, so nothing the game shows reads a frame back on the CPU, and the copy only made each
+                // display list wait for the GPU's readback. The desktop build keeps RT64's default.
+#ifdef __EMSCRIPTEN__
+                recompui::renderer::set_render_to_ram(false);
+#endif
                 return recompui::renderer::create_render_context(
                     rdram, window_handle, ultramodern::renderer::PresentationMode::PresentEarly, developer_mode);
             },
