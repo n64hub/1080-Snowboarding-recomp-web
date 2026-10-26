@@ -45,7 +45,11 @@ RetroAchievements: the launcher has no Achievements option on the page and `src/
 client there. MSAA: RT64 has none on WebGPU, which gives no sample positions. Everything else is the desktop
 build's, and a page starts with Framerate at Display, RT64 interpolating to the display's rate, and Resolution at
 Auto, the canvas's size. Render to RAM: the page draws each frame on the GPU only and copies none back to the game's
-memory, since nothing the game shows reads one (`src/main/main.cpp` says how that was found).
+memory, since nothing the game shows reads one (`src/main/main.cpp` says how that was found). RT64 still checks the
+game's memory at each display list for what the CPU wrote over a framebuffer, as it does after a copy, so a
+framebuffer whose memory the game reused to load a level is dropped and not read for the textures loaded there, and
+it skips this port's check for framebuffer memory reused before its frame was written back, which only guards the
+copy (both in `patches/runtime/rt64-camera-cuts.patch`).
 
 ## The shader list
 

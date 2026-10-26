@@ -385,10 +385,10 @@ index 61bb3b1..bf80c56 100644
          void pushProjectionMatrix();
          void popProjectionMatrix();
 diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
-index 00ebbf0..694b642 100644
+index 00ebbf0..979195c 100644
 --- a/src/hle/rt64_state.cpp
 +++ b/src/hle/rt64_state.cpp
-@@ -643,6 +643,29 @@ namespace RT64 {
+@@ -643,6 +643,35 @@ namespace RT64 {
          rdramCheckPending = false;
      }
  
@@ -397,6 +397,12 @@ index 00ebbf0..694b642 100644
 +        // RDRAM by the next one. If the CPU has meanwhile reused that memory (a game freeing its
 +        // framebuffers to load a level, say), writing the old frame back would destroy the new data,
 +        // which real hardware never does since the RDP writes as it draws. Skip those write-backs.
++        // Without render to RAM (a game that turns it off) nothing is written back, so there is nothing to skip.
++        const bool extendedRenderToRAMSet = (extended.renderToRAM < UINT8_MAX);
++        if (!(extendedRenderToRAMSet ? (extended.renderToRAM != 0) : ext.emulatorConfig->framebuffer.renderToRAM)) {
++            return;
++        }
++
 +        const Workload &workload = ext.workloadQueue->workloads[ext.workloadQueue->writeCursor];
 +        for (uint32_t f = 0; f < workload.fbPairCount; f++) {
 +            const FramebufferPair &fbPair = workload.fbPairs[f];
@@ -418,7 +424,7 @@ index 00ebbf0..694b642 100644
      void State::fullSyncFramebufferPairTiles(Workload &workload, FramebufferPair &fbPair, uint32_t &loadOpCursor, uint32_t &rdpTileCursor) {
          auto loadOperation = [&](uint32_t loadOpIndex) {
              const auto &loadOp = workload.drawData.loadOperations[loadOpIndex];
-@@ -1478,9 +1501,11 @@ namespace RT64 {
+@@ -1478,9 +1507,11 @@ namespace RT64 {
                  pairCursor = framebufferPairCursor;
                  while (pairCursor < maxFramebufferPair) {
                      if (getFramebufferPairs(pairCursor)) {
@@ -432,7 +438,21 @@ index 00ebbf0..694b642 100644
                              depthFb->copyNativeToRAM(&RDRAM[depthFb->addressStart], depthWriteWidth, depthRowStart, std::min(depthRowEnd, depthFb->height));
                          }
                      }
-@@ -1613,6 +1638,8 @@ namespace RT64 {
+@@ -1604,6 +1635,13 @@ namespace RT64 {
+             // Indicate the next time a display list is parsed, RDRAM should be checked.
+             rdramCheckPending = true;
+         }
++        else {
++            // Without render to RAM the frames never reach RDRAM, so it changes only where the CPU writes it. Check it all
++            // the same: the game frees its framebuffers' memory to load a level, and a framebuffer left over that memory
++            // would hand its old frame to the textures loaded there (a copy of it for each, at the output's size).
++            framebufferManager.hashTracking(RDRAM);
++            rdramCheckPending = true;
++        }
+ 
+ #   if SCRIPT_ENABLED
+         // Notify the current script the frame is about to end and should be processed.
+@@ -1613,6 +1651,8 @@ namespace RT64 {
          }
  #   endif
  
