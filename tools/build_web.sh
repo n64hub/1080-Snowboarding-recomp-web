@@ -15,7 +15,8 @@
 #    lines: the web's change to those (web/patches/files.txt) is web/patches/<project>.patch instead, made on top of
 #    the game's from the N64Recomp-browser commit web/patches/files.txt names, with what the web has changed in them
 #    since merged in by apply.cmake --since (only a change that meets the game's own lines stops the build, for
-#    another merge by hand).
+#    another merge by hand). A file marked own there keeps the game's code alone: the web's change to it is left out,
+#    then and later.
 # 2. N64Recomp and RSPRecomp, built natively from the patched lib/N64ModernRuntime/N64Recomp: the page needs the code
 #    the web-patched N64Recomp writes, and the game's own N64Recomp.patch is on it too.
 # 3. The recompiler's input from the ROM (tools/gen_recomp.py), the recompiled game and the audio microcode, in
@@ -49,8 +50,9 @@ step "Submodules"
 [[ $patches_only == 1 || -f lib/rcheevos/include/rc_client.h ]] || git submodule update --init lib/rcheevos
 
 step "Patches"
-# <name> <checkout> [files left to web/patches/<name>.patch, merged from the commit files.txt names]
+# <name> <checkout> [files left to web/patches/<name>.patch, merged from the commit files.txt names, or left out]
 shared() { awk -v p="$1" '!/^#/ && $1 == p { printf "%s ", $2 }' web/patches/files.txt; }
+merged() { awk -v p="$1" '!/^#/ && $1 == p && $3 != "own" { printf "%s ", $2 }' web/patches/files.txt; }
 merged_from="$(sed -n 's/^# merged from N64Recomp-browser //p' web/patches/files.txt)"
 web_patches="rt64 lib/rt64 $(shared rt64)
 plume lib/rt64/src/contrib/plume
@@ -78,7 +80,8 @@ if [[ "$(cat $prep/web-patched 2> /dev/null)" != "$stamp" ]] || git -C lib/rt64 
     while read -r name checkout skip; do
         cmake -P $browser/patches/apply.cmake "$name" "$checkout" $skip
         [[ ! -f web/patches/$name.patch ]] || git -C "$checkout" apply --whitespace=nowarn "$root/web/patches/$name.patch"
-        [[ -z "$skip" ]] || cmake -P $browser/patches/apply.cmake "$name" "$checkout" --since "$merged_from" $skip
+        since="$(merged "$name")"
+        [[ -z "$since" ]] || cmake -P $browser/patches/apply.cmake "$name" "$checkout" --since "$merged_from" $since
     done <<< "$web_patches"
     echo "$stamp" > $prep/web-patched
 fi
