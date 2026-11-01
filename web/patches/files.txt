@@ -15,7 +15,9 @@
 # RecompFrontend: the game's RecompFrontend saves player assignments next to the web's mappings object. Its controls
 # page is upstream's newer, which assigns players on the page itself: the web's change to the page is for upstream's
 # older one (Assign players while a multiplayer game plays as single-player mode), and this game keeps single-player
-# mode.
+# mode. So profiles.cpp is the game's too after the web's change from the commit below: the web's later changes to it
+# are the rules of players assigned in a multiplayer game (whose keyboard each reads, a keyboard player's Reset to
+# defaults), which never run in single-player mode and meet upstream's newer Reset to defaults.
 # merged from N64Recomp-browser 66f868c71bf18f2f1a8fbc6cc3bfc31150e1cd3d
 rt64 src/gui/rt64_file_dialog.cpp
 rt64 src/gui/rt64_inspector.cpp
@@ -30,5 +32,5 @@ rt64 src/shaders/TextureDecoder.hlsli
 rt64 src/shaders/TextureSampler.hlsli
 hlslpp include/hlsl++/platforms/wasm.h
 N64Recomp src/cgenerator.cpp
-RecompFrontend recompinput/src/profiles.cpp
+RecompFrontend recompinput/src/profiles.cpp own
 RecompFrontend recompui/src/config/ui_config_page_controls.cpp own
