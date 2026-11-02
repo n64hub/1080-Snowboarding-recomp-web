@@ -12,7 +12,8 @@
 # on Crystal Peak and on Golden Forest, 90 s each, and Training's course, 60 s. Not recorded: the courses a save opens
 # later (Mountain Village, Dragon Cave, Deadly Fall, the Half Pipe and Air Make), Trick Attack, Contest and 2P VS,
 # and a race's end past the time ridden. Flags follow settings (filtering, HDR, upscaling), so a change to one of
-# those defaults means recording again.
+# those defaults means recording again. Crystal Lake's last two were added by hand: the regular play
+# (tools/play_plan.json) missed them later in the race than the 100 s recorded.
 00404240 00802c0f fc309661 ff2fffff 008a010b
 00504240 00902ccf fcffffff fffcf438 088e002b
 00404240 00802c0f fc309661 ff2fffff 008a000b
@@ -62,6 +63,8 @@ section crystal-lake
 004041c8 00882c0f fcffffff fffdf6fb 0800000b
 00404240 00802c0f fc309a61 ff37ffff 008a000b
 00442230 00882c0f fcffffff fffe793c 0800000c
+00404a54 00800ccf fcff9bff ff377fbf 088a000b
+00404a54 00800ccf fcff9bff ff377fbf 008a000b
 section crystal-peak
 c8113078 00982c0f fc127fff fffff238 088a0008
 00404a54 00802c0f fcffb3ff ff65feff 088a000b
