@@ -115,6 +115,12 @@ fi
 # --- 4. The page ---
 step "Page"
 embuilder build sdl2-mt freetype-legacysjlj > /dev/null 2>&1
+# GAME_VERSION, the launcher's version, is a cache variable, so a build-web configured before CMakeLists.txt's version
+# moved kept the old one: dropped from the cache when it differs, CMakeLists.txt sets it again.
+version="$(sed -n 's/^set(GAME_VERSION "\([^"]*\)".*/\1/p' CMakeLists.txt)"
+if [[ -f build-web/CMakeCache.txt ]] && ! grep -qx "GAME_VERSION:STRING=$version" build-web/CMakeCache.txt; then
+    cmake -U GAME_VERSION build-web > /dev/null
+fi
 [[ -f build-web/build.ninja ]] || emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DGAME_GENERATED_DIR="$gen" -DRT64_NAGA_EXECUTABLE="$(command -v naga)" \
     -DPython3_EXECUTABLE="$(command -v python3)" > $prep/configure.log 2>&1 ||
