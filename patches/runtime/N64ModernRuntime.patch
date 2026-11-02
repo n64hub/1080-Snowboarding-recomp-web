@@ -37,8 +37,115 @@ index 1cb3f6a..55569c8 100644
          assert(exit_reason == RspExitReason::Broke);
          return false;
      }
+diff --git a/librecomp/src/sp.cpp b/librecomp/src/sp.cpp
+index ae0f44f..fbe2555 100644
+--- a/librecomp/src/sp.cpp
++++ b/librecomp/src/sp.cpp
+@@ -9,7 +9,73 @@ extern "C" void osSpTaskLoad_recomp(uint8_t* rdram, recomp_context* ctx) {
+ 
+ bool dump_frame = false;
+ 
++#if defined(__EMSCRIPTEN__)
++#include <mutex>
++// The graphics task yields as the RSP's would. The scheduler (bootup_061CF4) asks it to when an audio task is due, and
++// starts the audio task once the RSP reports back, then the graphics task again. The graphics task reports done only
++// once the renderer has finished with it (events.cpp), so with yields ignored the audio task waited for the renderer,
++// on a page through a stall of seconds while Firefox builds pipelines, and the VIs that would have rebuilt its command
++// list are held back for the stall (ULTRAMODERN_VIS_WAIT_FOR_RENDERER). The game's main thread goes on loading
++// meanwhile: the title demo's load freed the title's music buffers and gave their memory to the scheduler's lists, and
++// the audio task, started after the stall from its list of before it, wrote its samples over them: the page trapped in
++// the scheduler. Yielded at once, the audio task runs within the VI that built it. Its restart sends nothing to the
++// renderer, which has the task still: the report comes from whichever of the restart and the renderer's end comes last.
++namespace {
++    std::mutex gfx_task_mutex;
++    // Started and not reported done.
++    bool gfx_task_running = false;
++    // Reported yielded and not started again.
++    bool gfx_task_yielded = false;
++    // The renderer finished it while it was yielded.
++    bool gfx_task_rendered_yielded = false;
++    // Asked to yield again while yielded: it yields again as it starts again.
++    bool gfx_task_yield_wanted = false;
++}
++
++void sp_complete();
++
++// The renderer has finished the graphics task (events.cpp).
++void gfx_task_rendered() {
++    std::lock_guard lock{ gfx_task_mutex };
++    if (gfx_task_yielded) {
++        gfx_task_rendered_yielded = true;
++        return;
++    }
++    gfx_task_running = false;
++    gfx_task_yield_wanted = false;
++    sp_complete();
++}
++
++// osSpTaskStartGo of a graphics task: whether it is the yielded one started again, which the renderer has already.
++static bool gfx_task_started_again() {
++    std::lock_guard lock{ gfx_task_mutex };
++    if (!gfx_task_yielded) {
++        gfx_task_running = true;
++        gfx_task_yield_wanted = false;
++        return false;
++    }
++    gfx_task_yielded = false;
++    if (gfx_task_rendered_yielded) {
++        gfx_task_rendered_yielded = false;
++        gfx_task_running = false;
++        gfx_task_yield_wanted = false;
++        sp_complete();
++    }
++    else if (gfx_task_yield_wanted) {
++        gfx_task_yield_wanted = false;
++        gfx_task_yielded = true;
++        sp_complete();
++    }
++    return true;
++}
++#endif
++
+ extern "C" void osSpTaskStartGo_recomp(uint8_t* rdram, recomp_context* ctx) {
++#if defined(__EMSCRIPTEN__)
++    if (TO_PTR(OSTask, ctx->r4)->t.type == M_GFXTASK && gfx_task_started_again()) {
++        return;
++    }
++#endif
+     //printf("[sp] osSpTaskStartGo(0x%08X)\n", (uint32_t)ctx->r4);
+     OSTask* task = TO_PTR(OSTask, ctx->r4);
+     if (task->t.type == M_GFXTASK) {
+@@ -37,12 +103,28 @@ extern "C" void osSpTaskStartGo_recomp(uint8_t* rdram, recomp_context* ctx) {
+ }
+ 
+ extern "C" void osSpTaskYield_recomp(uint8_t* rdram, recomp_context* ctx) {
++#if defined(__EMSCRIPTEN__)
++    std::lock_guard lock{ gfx_task_mutex };
++    if (gfx_task_yielded) {
++        gfx_task_yield_wanted = true;
++    }
++    else if (gfx_task_running) {
++        gfx_task_yielded = true;
++        sp_complete();
++    }
++#else
+     // Ignore yield requests (acts as if the task completed before it received the yield request)
++#endif
+ }
+ 
+ extern "C" void osSpTaskYielded_recomp(uint8_t* rdram, recomp_context* ctx) {
++#if defined(__EMSCRIPTEN__)
++    std::lock_guard lock{ gfx_task_mutex };
++    ctx->r2 = gfx_task_yielded ? 1 : 0; // OS_TASK_YIELDED
++#else
+     // Task yield requests are ignored, so always return 0 as tasks will never be yielded
+     ctx->r2 = 0;
++#endif
+ }
+ 
+ extern "C" void __osSpSetPc_recomp(uint8_t* rdram, recomp_context* ctx) {
 diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
-index 17d7a47..be07e31 100644
+index 17d7a47..ed0f728 100644
 --- a/ultramodern/src/events.cpp
 +++ b/ultramodern/src/events.cpp
 @@ -368,7 +368,9 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
@@ -52,11 +159,16 @@ index 17d7a47..be07e31 100644
                  ultramodern::measure_input_latency();
  
                  PTR(u64) displaylist = task_action->task.t.data_ptr;
-@@ -378,6 +380,7 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+@@ -378,6 +380,12 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
                  renderer_context->send_dl(&task_action->task);
                  [[maybe_unused]] auto renderer_end = std::chrono::high_resolution_clock::now();
  
++#if defined(__EMSCRIPTEN__)
++                // Reported now unless the scheduler has it yielded (librecomp's sp.cpp).
++                { void gfx_task_rendered(); gfx_task_rendered(); }
++#else
 +                sp_complete();
++#endif
                  dp_complete();
                  // TODO hook the parsed event up to the actual parsing point when a callback is added to RT64.
                  ultramodern::extensions::on_displaylist_parsed(displaylist);

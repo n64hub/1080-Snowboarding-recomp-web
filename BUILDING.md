@@ -35,6 +35,12 @@ game's own lines stops the build: merge it into `web/patches` by hand then, as `
 `bash tools/build_web.sh --patches` does only that step, without a ROM; N64Recomp-browser's CI runs it on every change
 there.
 
+On the page the graphics task yields when the game's scheduler asks, as the RSP's does, so that an audio task due
+meanwhile runs at once (`patches/runtime/N64ModernRuntime.patch`, librecomp's `sp.cpp`). The game's own patch reports a
+graphics task done only once RT64 has drawn it, and a page's renderer can stall for seconds while the browser builds
+pipelines: an audio task held back behind it ran on a command list made before the stall, whose buffers the game had
+freed and reused since, and wrote over the scheduler's lists.
+
 Serve `build-web` with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`
 (threads need SharedArrayBuffer), or with `coi_serviceworker.js` beside the page where headers can't be set, and open
 it in a browser with WebGPU. The ROM, settings and saves are kept in the browser's storage.
