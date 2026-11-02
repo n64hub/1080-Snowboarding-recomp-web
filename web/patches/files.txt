@@ -8,7 +8,11 @@
 # rt64: the game's rt64 is newer than the web's (the texture decoder shared with the CPU in src/shared, GPU timestamps
 # that may be missing, the VI rate of uneven frames, file dialogs that answer by callback) and has its camera cuts
 # patch (staleWritebacks). The shared decoder calls TMEM's sizes TMEM_RDP_*, the web's shaders RDP_TMEM_*. With
-# RT64_UNEVEN_FRAME_RATES (on in a page) the web's rate for uneven frames is used, the game's otherwise.
+# RT64_UNEVEN_FRAME_RATES (on in a page) the web's rate for uneven frames is used, the game's otherwise. In
+# rt64_rsp.cpp the game's patch and the web both mend the box of a triangle with a corner behind the camera, which
+# projects to meaningless points (the bar at the bottom of the ice cave): the game's takes it as covering the
+# viewport, the web's (rt64 a8bfc93, dd2fd23) as covering the scissor if it crosses the camera plane and as drawing
+# nothing if it is wholly behind it. The page keeps the web's, which covers the game's case.
 # hlslpp: the game's rt64 pins a newer hlslpp, which shifts each lane by its own count its own way; the web's other
 # wasm fixes are kept.
 # N64Recomp: the game's own patch writes ops into $zero as the web's assignment() does; the web's is kept.
@@ -22,6 +26,7 @@
 rt64 src/gui/rt64_file_dialog.cpp
 rt64 src/gui/rt64_inspector.cpp
 rt64 src/hle/rt64_game_frame.cpp
+rt64 src/hle/rt64_rsp.cpp
 rt64 src/hle/rt64_state.cpp
 rt64 src/hle/rt64_state.h
 rt64 src/hle/rt64_vi.cpp

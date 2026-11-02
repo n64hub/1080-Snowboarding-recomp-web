@@ -711,6 +711,99 @@ index 3db896f..0c0a1b6 100644
          }
      }
  
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index 1208816..9d773f1 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -1217,9 +1217,41 @@ namespace RT64 {
+             maxMatrix = std::max(maxMatrix, worldIndices[globalIndex]);
+         }
+ 
+-        bool visibleTri = true;
++        // The box and the facing test below are read off posScreen, xyz / w with no clipping. A vertex at or behind the
++        // camera plane (w <= 0) doesn't land there: the divide flips it through the centre, so a triangle crossing the
++        // plane got a box anywhere and a winding that was a coin toss, and one a hair in front projected past what
++        // the int32 casts hold. The RSP clips such a triangle and the RDP draws what is left, but here it could be
++        // judged back-facing or its box miss the viewport, and a pass made only of such triangles (a model filling
++        // the bottom of the picture with the camera pitched up at it) had an empty drawColorRect and wasn't drawn in
++        // interpolated frames. A triangle crossing the plane is taken as facing the camera and as covering the scissor,
++        // the bound the RDP draws against. One with every vertex behind it is clipped whole and draws nothing, and one
++        // wholly in front has its box from its vertices held to 8192 pixels each way, past any framebuffer, and its
++        // winding judged only while they are within 4096 (a projective image keeps its winding, but the cross product
++        // of far-out vertices overflows). Taking every such triangle as covering the scissor made a pass whose
++        // triangles were all behind the camera or off one side a write of its whole framebuffer: Banjo-Kazooie's
++        // title made ~100 full-screen tile copies of one within a few seconds, each kept, 3.6 GB at 3840x2000, and
++        // Firefox lost its device to Out of Memory on an 8 GB card. The GPU still clips the triangle as it always did.
++        int behindCount = 0;
++        bool unprojectable = false;
++        bool farOut = false;
++        for (int i = 0; i < 3; i++) {
++            const hlslpp::float4 &t = workload.drawData.posTransformed[globalIndices[i]];
++            const hlslpp::float3 &s = posScreen[globalIndices[i]];
++            if (!(t[3] > 0.0f)) {
++                behindCount++;
++            }
++            else if ((s[0] != s[0]) || (s[1] != s[1])) {
++                unprojectable = true;
++            }
++            else if (!(s[0] * s[0] < 16777216.0f) || !(s[1] * s[1] < 16777216.0f)) {
++                farOut = true;
++            }
++        }
++
++        unprojectable = unprojectable || ((behindCount > 0) && (behindCount < 3));
++        bool visibleTri = (behindCount < 3);
+         const bool usesCulling = geometryMode & cullBothMask;
+-        if (usesCulling) {
++        if (usesCulling && visibleTri && !unprojectable && !farOut) {
+             const hlslpp::float3 U = posScreen[globalIndices[1]] - posScreen[globalIndices[0]];
+             const hlslpp::float3 V = posScreen[globalIndices[2]] - posScreen[globalIndices[0]];
+             const hlslpp::float3 N = hlslpp::cross(V, U);
+@@ -1227,27 +1259,26 @@ namespace RT64 {
+         }
+ 
+         const FixedRect &scissorRect = state->rdp->scissorRectStack[state->rdp->scissorStackSize - 1];
++        if (!scissorRect.isNull()) {
++            const int16_t viewportRatios[4] = { 1, 1, -1, -1 };
++            const FixedRect viewportRect = viewportStack[viewportStackSize - 1].rect(viewportRatios).intersection(scissorRect);
++            if (!viewportRect.isNull()) {
++                fbPair.viewportRect.merge(viewportRect);
++            }
++        }
++
+         if (visibleTri && !scissorRect.isNull()) {
+             fbPair.scissorRect.merge(scissorRect);
+ 
+-            FixedRect drawRect;
+-            bool behindCamera = false;
+-            for (int i = 0; i < 3; i++) {
+-                const hlslpp::float3 &v = posScreen[globalIndices[i]];
+-                drawRect.ulx = std::min(drawRect.ulx, int32_t(v[0] * 4.0f));
+-                drawRect.uly = std::min(drawRect.uly, int32_t(v[1] * 4.0f));
+-                drawRect.lrx = std::max(drawRect.lrx, int32_t(hlslpp::ceil(v.x).x * 4.0f));
+-                drawRect.lry = std::max(drawRect.lry, int32_t(hlslpp::ceil(v.y).x * 4.0f));
+-                if ((globalIndices[i] < workload.drawData.posTransformed.size()) && (float(workload.drawData.posTransformed[globalIndices[i]].w) <= 0.0f)) {
+-                    behindCamera = true;
+-                }
+-            }
+-
+-            // A corner behind the camera projects to a meaningless point, so the corners don't bound
+-            // what the clipped triangle covers. Assume it can reach the whole viewport; the
+-            // intersection below limits it to the viewport and scissor.
+-            if (behindCamera) {
+-                drawRect = FixedRect(INT32_MIN / 2, INT32_MIN / 2, INT32_MAX / 2, INT32_MAX / 2);
++            FixedRect drawRect = unprojectable ? scissorRect : FixedRect();
++            for (int i = 0; (i < 3) && !unprojectable; i++) {
++                const hlslpp::float3 &s = posScreen[globalIndices[i]];
++                const float x = std::min(std::max(float(s[0]), -8192.0f), 8192.0f);
++                const float y = std::min(std::max(float(s[1]), -8192.0f), 8192.0f);
++                drawRect.ulx = std::min(drawRect.ulx, int32_t(x * 4.0f));
++                drawRect.uly = std::min(drawRect.uly, int32_t(y * 4.0f));
++                drawRect.lrx = std::max(drawRect.lrx, int32_t(hlslpp::ceil(hlslpp::float1(x)).x * 4.0f));
++                drawRect.lry = std::max(drawRect.lry, int32_t(hlslpp::ceil(hlslpp::float1(y)).x * 4.0f));
+             }
+ 
+             const interop::RSPViewport &viewport = viewportStack[viewportStackSize - 1];
 diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
 index 694b642..b06b87f 100644
 --- a/src/hle/rt64_state.cpp

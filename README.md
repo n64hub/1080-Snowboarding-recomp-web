@@ -12,7 +12,8 @@
 in the launcher and kept in the browser. It needs WebGPU (Chrome or Edge 113 and up). The page is built from this
 branch and published with N64Recomp-browser's `tools/publish_page.sh`, so it can be a commit or two behind. The page
 has every option the desktop build has but RetroAchievements, which the page leaves out, and MSAA, which RT64 can't do
-on WebGPU (it has no sample positions).
+on WebGPU (it has no sample positions). VSync is there but changes nothing on the page: the browser shows the picture
+at the display's rate, without tearing, either way.
 
 <h1 align="center">1080° Snowboarding: Recompiled</h1>
 
