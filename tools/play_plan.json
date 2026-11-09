@@ -14,11 +14,11 @@
     ["wait", 3000]
   ],
   "setup": [
-    ["rom", 90, 437],
+    ["rom", 90, 396],
     ["wait", 3000]
   ],
   "start": [
-    ["click", 90, 437],
+    ["click", 90, 396],
     ["wait", 3000],
     ["evalFile", "game_state.js"],
     ["eval", "untilLoaded(\"titproc\", 30000)"],
