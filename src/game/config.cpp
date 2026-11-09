@@ -55,6 +55,11 @@ void game::init_config() {
     game::add_board_thickness_option(graphics_tab);
     game::add_crt_filter_option(graphics_tab);
     game::add_vsync_option(graphics_tab);
+    game::add_n64_slowdown_option(graphics_tab);
+#ifndef __EMSCRIPTEN__
+    // Not on a page: no pictures come with it and a player can't add any to its folder.
+    game::add_tv_background_option(graphics_tab);
+#endif
     game::add_hd_textures_option(graphics_tab);
 
     set_control_descriptions();

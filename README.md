@@ -11,13 +11,14 @@
 **Play it in the browser: https://n64hub.com/1080-snowboarding/**, with your own 1080° Snowboarding ROM (USA), picked
 in the launcher and kept in the browser. It needs WebGPU (Chrome or Edge 113 and up). The page is built from this
 branch and published with N64Recomp-browser's `tools/publish_page.sh`, so it can be a commit or two behind. The page
-has every option the desktop build has but RetroAchievements, which the page leaves out, and MSAA, which RT64 can't do
-on WebGPU (it has no sample positions). VSync is there but changes nothing on the page: the browser shows the picture
-at the display's rate, without tearing, either way.
+has every option the desktop build has but RetroAchievements, which the page leaves out, TV Background, whose pictures
+the page doesn't have and a player can't add to it, and MSAA, which RT64 can't do on WebGPU (it has no sample
+positions). VSync is there but changes nothing on the page: the browser shows the picture at the display's rate,
+without tearing, either way. N64 Slowdown is off, as on the desktop, so the page runs the game at full speed.
 
 <h1 align="center">1080° Snowboarding: Recompiled</h1>
 
-<p align="center">A native PC port of the 1998 N64 snowboarding game 1080° Snowboarding, built with static recompilation, with widescreen, 60 and 120 fps, longer draw distance, HD boards, RetroAchievements and more, all optional.<br>Made by Vibe Slop Studios.</p>
+<p align="center">A native PC port of the 1998 N64 snowboarding game 1080° Snowboarding, built with static recompilation, with widescreen, 60 and 120 fps, longer draw distance, HD boards, TV backgrounds, GameShark cheats, RetroAchievements and more, all optional.<br>Made by Vibe Slop Studios.</p>
 
 <p align="center">
   <a href="https://github.com/thebradshaw/1080-Snowboarding-decomp/releases/latest/download/1080SnowboardingRecompiled-windows-x64.zip"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-Windows%20(x64)-2a6fe8?style=for-the-badge&logo=windows&logoColor=white" height="44"></a>
@@ -47,6 +48,18 @@ The downloads above are always the latest release; older ones are on the [releas
 
 ![Racing at dusk](docs/screenshots/dusk.jpg)
 
+<p align="center"><a href="https://buymeacoffee.com/chrisbradshaw"><img alt="Buy me a coffee" src="docs/coffee.svg" width="400"></a></p>
+
+## What's new
+
+- **1.2.2:** With a TV background on, the game renders at the same resolution as without one and is scaled into the TV's screen. This is another fix for thin lines through 2D pictures in full screen.
+- **1.2.1:** With a TV background on, logos, menus and text no longer get thin lines through them, and the N64 Solid background puts the game in the middle of the TV.
+- **1.2:** New **N64 Slowdown** setting (off by default). The game always runs at full speed at 30, 60 and 120 fps; with this on, busy scenes slow down as they did on the console. The amount is an estimate for now.
+- **1.1:** New **TV Background** setting, which shows the game on a TV in a room, with Soqueroeu's N64 TVs included. New **Cheats** page on the launcher for GameShark and Action Replay codes, with common unlocks built in.
+- **1.0.1:** Fixed the bar in the ice cave and added a VSync setting.
+
+Older releases and their downloads are on the [releases page](../../releases).
+
 ## Options
 
 Every enhancement can be turned off to get the N64 look back. All of them are on the launcher's main page and in Settings > Graphics.
@@ -56,6 +69,7 @@ Every enhancement can be turned off to get the N64 look back. All of them are on
 | Aspect Ratio | **Expand** draws the game as wide as your window (widescreen); **Original** keeps 4:3 |
 | Resolution | Up to your display's resolution, with MSAA |
 | Frame Rate | **60** (the default), **120**, or **30** like the N64 |
+| N64 Slowdown | **On** slows busy scenes down the way the N64 did; **Off** (the default) always runs at full speed. The frame rate setting never changes the game's speed |
 | VSync | **On** (the default) keeps the picture from tearing; **Off** shows frames as soon as they are ready |
 | Draw Distance | **Original**, **Extended** (about three times as far) or **Maximum** (the whole course at once, the default) |
 | Field of View | 100% matches the N64; higher shows more of the course |
@@ -64,8 +78,13 @@ Every enhancement can be turned off to get the N64 look back. All of them are on
 | Rider Shadow | **Original** casts it along the sun; **Under Rider** keeps it under the rider |
 | Ice Reflection | **Solid** draws the rider's reflection as one see-through figure; **Original** keeps the N64's patchy look |
 | CRT Filter | **Scanlines** or a full **CRT** look (off by default) |
+| TV Background | Shows the game on a TV in a room, like RetroArch bezels. Put PNG pictures in the `backgrounds` folder (next to the program or in the app data folder); the game goes in the flat screen area in the middle, and a transparent `<name>_Led.png` is drawn on top (off by default) |
 
 Keyboard, mouse and gamepads all work, and controls can be remapped in Controls. The Mods menu loads RT64 texture packs and code mods.
+
+## Cheats
+
+Choose **Cheats** on the launcher to use original N64 GameShark and Action Replay codes. Common unlocks (all boarders and courses, the Panda and Penguin boards, trick attacks and contests) are built in; add your own with a name and a code such as `81255088 00FF`. Cheats can be turned on and off one by one and are saved for next time.
 
 ## RetroAchievements
 
@@ -115,6 +134,8 @@ not in this repository; set `HD_TEXTURE_PACK` and `LAUNCHER_LOGO` to bundle them
 
 ## Credits
 
+If you enjoy this port, you can [buy me a coffee](https://buymeacoffee.com/chrisbradshaw).
+
 - [Snowboard Kids 2: Recompiled](https://github.com/cdlewis/snowboardkids2-recomp)
   by cdlewis (GPL-3), whose runtime setup this port started from
 - [Zelda64Recomp](https://github.com/Zelda64Recomp/Zelda64Recomp) (GPL-3), for
@@ -122,6 +143,8 @@ not in this repository; set `HD_TEXTURE_PACK` and `LAUNCHER_LOGO` to bundle them
 - [N64Recomp](https://github.com/N64Recomp/N64Recomp) by Mr-Wiseguy (MIT)
 - [djsaunde/1080-decomp](https://github.com/djsaunde/1080-decomp), used as a
   reference while working out the module format
+- Soqueroeu, for the N64 TV backgrounds bundled with releases (not part of this
+  repository)
 
 ## License
 

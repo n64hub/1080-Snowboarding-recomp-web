@@ -1,4 +1,4 @@
-1080 Snowboarding: Recompiled 1.0.1 for Windows
+1080 Snowboarding: Recompiled 1.2.2 for Windows
 
 1. Unzip this folder anywhere (use a new folder, not over an older version).
 2. Run 1080SnowboardingRecompiled.exe.
@@ -15,6 +15,31 @@ problem happens.
 
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
+
+Changes in 1.2.2: With a TV background on, the game now renders at the same
+resolution as without one and is scaled down into the TV's screen. This is
+another fix for thin lines through 2D pictures, which some PCs still showed
+in full screen.
+
+Changes in 1.2.1: With a TV background on, 2D pictures (logos, menus, text)
+no longer have thin lines through them, and the N64 Solid background puts the
+game in the middle of the TV.
+
+Changes in 1.2: New N64 Slowdown setting (launcher main page and Settings >
+Graphics, off by default). The game moves forward a fixed step each frame, so
+on the N64 it slowed down whenever a scene was too busy to draw in time. This
+version always draws in time and runs at full speed at 30, 60 and 120 fps.
+With N64 Slowdown on, busy scenes slow down as they did on the console. The
+amount is an estimate for now; it matches best with the Original draw distance.
+
+Changes in 1.1: New TV Background setting: shows the game on a TV in a room,
+like RetroArch's bezel overlays. Put PNG pictures in the "backgrounds" folder
+next to the exe (or in %LOCALAPPDATA%\1080SnowboardingRecompiled\backgrounds)
+and restart; each picture becomes a choice. The game goes in the flat screen
+area in the middle of the picture, and a transparent "<name>_Led.png" is drawn
+on top (such as a TV's power light). New Cheats page on the launcher for
+original N64 GameShark and Action Replay codes: built-in unlocks, your own
+codes, each one on or off, saved for next time.
 
 Changes in 1.0.1: Fixed the dark bar that flickered across the bottom of the
 screen in the Mountain Village ice cave. New VSync setting (launcher main page
@@ -194,3 +219,5 @@ Changes in v0.1.4: log.txt includes a crash report.
 Changes in v0.1.3: writes log.txt for bug reports.
 Changes in v0.1.2: Match Race no longer crashes at character select, board
 select or when the race loads (tested under Wine and Linux).
+
+The N64 TV backgrounds in the "backgrounds" folder are by Soqueroeu.
