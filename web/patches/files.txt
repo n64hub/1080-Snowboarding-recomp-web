@@ -12,7 +12,8 @@
 # rt64_rsp.cpp the game's patch and the web both mend the box of a triangle with a corner behind the camera, which
 # projects to meaningless points (the bar at the bottom of the ice cave): the game's takes it as covering the
 # viewport, the web's (rt64 a8bfc93, dd2fd23) as covering the scissor if it crosses the camera plane and as drawing
-# nothing if it is wholly behind it. The page keeps the web's, which covers the game's case.
+# nothing if it is wholly behind it. The page keeps the web's, which covers the game's case, and gives the game's N64
+# cost estimate (N64 Slowdown) after it the game's behindCamera, a corner behind the camera, from the web's count.
 # hlslpp: the game's rt64 pins a newer hlslpp, which shifts each lane by its own count its own way; the web's other
 # wasm fixes are kept.
 # N64Recomp: the game's own patch writes ops into $zero as the web's assignment() does; the web's is kept.

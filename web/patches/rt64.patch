@@ -759,7 +759,7 @@ index 1208816..9d773f1 100644
              const hlslpp::float3 U = posScreen[globalIndices[1]] - posScreen[globalIndices[0]];
              const hlslpp::float3 V = posScreen[globalIndices[2]] - posScreen[globalIndices[0]];
              const hlslpp::float3 N = hlslpp::cross(V, U);
-@@ -1227,27 +1259,26 @@ namespace RT64 {
+@@ -1227,27 +1259,29 @@ namespace RT64 {
          }
  
          const FixedRect &scissorRect = state->rdp->scissorRectStack[state->rdp->scissorStackSize - 1];
@@ -802,6 +802,9 @@ index 1208816..9d773f1 100644
 +                drawRect.lrx = std::max(drawRect.lrx, int32_t(hlslpp::ceil(hlslpp::float1(x)).x * 4.0f));
 +                drawRect.lry = std::max(drawRect.lry, int32_t(hlslpp::ceil(hlslpp::float1(y)).x * 4.0f));
              }
++
++            // The game's N64 cost estimate (N64 Slowdown) below bounds such a triangle by its corners in front.
++            const bool behindCamera = (behindCount > 0);
  
              const interop::RSPViewport &viewport = viewportStack[viewportStackSize - 1];
 diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
