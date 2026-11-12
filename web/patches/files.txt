@@ -23,7 +23,10 @@
 # mode. So profiles.cpp is the game's too after the web's change from the commit below: the web's later changes to it
 # are the rules of players assigned in a multiplayer game (whose keyboard each reads, a keyboard player's Reset to
 # defaults), which never run in single-player mode and meet upstream's newer Reset to defaults.
-# merged from N64Recomp-browser 66f868c71bf18f2f1a8fbc6cc3bfc31150e1cd3d
+# N64ModernRuntime: the game's sp.cpp answers the scheduler's yield of a graphics task itself (it reports the task
+# yielded and runs the audio task, then the graphics task's restart sends nothing to the renderer), so the web's
+# rsp::yield_asked in osSpTaskYield is left out there; its task_submitted is kept.
+# merged from N64Recomp-browser 18bfcba598c9c125a5fbf88ac0da6cb3590351af
 rt64 src/gui/rt64_file_dialog.cpp
 rt64 src/gui/rt64_inspector.cpp
 rt64 src/hle/rt64_game_frame.cpp
@@ -40,3 +43,4 @@ hlslpp include/hlsl++/platforms/wasm.h
 N64Recomp src/cgenerator.cpp
 RecompFrontend recompinput/src/profiles.cpp own
 RecompFrontend recompui/src/config/ui_config_page_controls.cpp own
+N64ModernRuntime librecomp/src/sp.cpp
