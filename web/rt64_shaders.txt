@@ -13,7 +13,9 @@
 # later (Mountain Village, Dragon Cave, Deadly Fall, the Half Pipe and Air Make), Trick Attack, Contest and 2P VS,
 # and a race's end past the time ridden. Flags follow settings (filtering, HDR, upscaling), so a change to one of
 # those defaults means recording again. Crystal Lake's last two were added by hand: the regular play
-# (tools/play_plan.json) missed them later in the race than the 100 s recorded.
+# (tools/play_plan.json) missed them later in the race than the 100 s recorded. The extended play
+# (tools/play_plan_extended.json: Crystal Lake's Match Race, then Time Attack on Crystal Peak and on Golden Forest, 36 s
+# each) missed none, on a fresh profile in Chrome and in Firefox.
 00404240 00802c0f fc309661 ff2fffff 008a010b
 00504240 00902ccf fcffffff fffcf438 088e002b
 00404240 00802c0f fc309661 ff2fffff 008a000b

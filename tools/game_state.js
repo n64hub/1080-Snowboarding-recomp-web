@@ -7,6 +7,9 @@
 //       select), "game" (a race or run), "mapN" (course N's data, 1 to 10), "trnproc" (training), ...
 //   modules()  the loaded ones of those, for the console.
 //   untilLoaded(name, ms) / untilGone(name, ms)  resolves once the module is loaded or gone, or after ms.
+//   frames()  the game's frame counter, 30 a second of the game's own time (a word in the kernel's data at 0x8005C6F4,
+//       found by its steady count: it runs through menus, races and pauses, and slows when the game's frames do), the
+//       extended plan's clock (tools/play_plan_extended.json, a clock step).
 // A slot keeps its addresses once its module is put away: the title's demo on Crystal Lake leaves map7 in after another
 // course loads, so the plans wait for the line the game prints as it loads a course ("map3_data.uso loaded").
 (() => {
@@ -27,6 +30,7 @@
     const slot = SLOTS + INDEX[name] * STRIDE;
     return n64r(slot + TEXT) !== 0 || n64r(slot + DATA) !== 0;
   };
+  window.frames = () => n64r(0x8005C6F4);
   window.modules = () => Object.keys(INDEX).filter((name) => window.loaded(name)).join(' ');
   window.untilLoaded = async (name, ms) =>
     ((await until(() => window.loaded(name), ms)) ? 'loaded: ' : 'not loaded: ') + window.modules();

@@ -72,4 +72,8 @@ then build the page again. The plan reads which of the game's modules are loaded
 the game is. Its header says what was played and what wasn't.
 
 `tools/play_plan.json` is the page's regular play, 2-3 minutes with every timeout counted, which N64Recomp-browser's
-`tools/play_page.mjs` plays to measure the page. Its header says what it plays.
+`tools/play_page.mjs` plays to measure the page, and `tools/play_plan_extended.json` its extended one, under 5,
+played when a change needs a longer play: it starts as the regular one does and goes on through the pause menu's Quit
+to Time Attack on Crystal Peak and Golden Forest, its rides on the game's own clock (`frames()` in
+`tools/game_state.js`). A shader a longer play draws that the list misses (the page's console names it) goes into the
+list. Each plan's header says what it plays.
