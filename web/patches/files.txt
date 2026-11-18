@@ -14,6 +14,8 @@
 # viewport, the web's (rt64 a8bfc93, dd2fd23) as covering the scissor if it crosses the camera plane and as drawing
 # nothing if it is wholly behind it. The page keeps the web's, which covers the game's case, and gives the game's N64
 # cost estimate (N64 Slowdown) after it the game's behindCamera, a corner behind the camera, from the web's count.
+# Under Expand the game widens to the TV screen's area (TV Background) in place of the window's, and that ratio is
+# divided by the shape of the framebuffer's pixels as the web divides the window's (rt64_workload_queue.cpp).
 # hlslpp: the game's rt64 pins a newer hlslpp, which shifts each lane by its own count its own way; the web's other
 # wasm fixes are kept.
 # N64Recomp: the game's own patch writes ops into $zero as the web's assignment() does; the web's is kept.
@@ -26,7 +28,7 @@
 # N64ModernRuntime: the game's sp.cpp answers the scheduler's yield of a graphics task itself (it reports the task
 # yielded and runs the audio task, then the graphics task's restart sends nothing to the renderer), so the web's
 # rsp::yield_asked in osSpTaskYield is left out there; its task_submitted is kept.
-# merged from N64Recomp-browser 18bfcba598c9c125a5fbf88ac0da6cb3590351af
+# merged from N64Recomp-browser 6a991659354e3fad9eec75a00908fedf89a5038e
 rt64 src/gui/rt64_file_dialog.cpp
 rt64 src/gui/rt64_inspector.cpp
 rt64 src/hle/rt64_game_frame.cpp
