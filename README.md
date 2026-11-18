@@ -10,11 +10,11 @@
 
 **Play it in the browser: https://n64hub.com/1080-snowboarding/**, with your own 1080° Snowboarding ROM (USA), picked
 in the launcher and kept in the browser. It needs WebGPU (Chrome or Edge 113 and up). The page is built from this
-branch and published with N64Recomp-browser's `tools/publish_page.sh`, so it can be a commit or two behind. The page
-has every option the desktop build has but RetroAchievements, which the page leaves out, TV Background, whose pictures
-the page doesn't have and a player can't add to it, and MSAA, which RT64 can't do on WebGPU (it has no sample
-positions). VSync is there but changes nothing on the page: the browser shows the picture at the display's rate,
-without tearing, either way. N64 Slowdown is off, as on the desktop, so the page runs the game at full speed.
+branch, so it can be a commit or two behind. The page has every option the desktop build has but RetroAchievements,
+which the page leaves out, TV Background, whose pictures the page doesn't have and a player can't add to it, and MSAA,
+which RT64 can't do on WebGPU (it has no sample positions). VSync is there but changes nothing on the page: the browser
+shows the picture at the display's rate, without tearing, either way. N64 Slowdown is off, as on the desktop, so the
+page runs the game at full speed.
 
 <h1 align="center">1080° Snowboarding: Recompiled</h1>
 
